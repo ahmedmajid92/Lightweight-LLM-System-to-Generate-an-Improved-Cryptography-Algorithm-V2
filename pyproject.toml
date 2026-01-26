@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crypto-cipher-lab"
+version = "2.0.0"
+description = "Research/education sandbox for experimenting with block-cipher-like constructions"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = [
+    "openai>=1.40.0",
+    "streamlit>=1.33.0",
+    "pydantic>=2.7.0",
+    "python-dotenv>=1.0.1",
+    "numpy>=1.24.0",
+    "pypdf>=4.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["cipherlab*"]

@@ -1,0 +1,28 @@
+name: crypto-cipher-lab
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python version
+  - python=3.10
+
+  # Core scientific packages (better installed via conda)
+  - numpy>=1.24.0
+
+  # Pip packages (better installed via pip for latest versions)
+  - pip
+  - pip:
+      # OpenAI SDK for LLM integration
+      - openai>=1.40.0
+
+      # Web UI framework
+      - streamlit>=1.33.0
+
+      # Data validation and settings management
+      - pydantic>=2.7.0
+
+      # Environment variable management
+      - python-dotenv>=1.0.1
+
+      # PDF parsing for knowledge base
+      - pypdf>=4.2.0
