@@ -22,7 +22,7 @@ st.set_page_config(page_title="Crypto Cipher Lab v2 (OpenAI)", layout="wide")
 settings = load_settings()
 
 st.title("Crypto Cipher Lab v2 — Block Cipher Builder (OpenAI)")
-st.caption("Research-only lab: compose SPN/Feistel ciphers, run local metrics, and iterate improvements with hybrid RAG.")
+st.caption("Research-only lab: compose SPN/Feistel/ARX ciphers, run local metrics, and iterate improvements with hybrid RAG.")
 
 registry = ComponentRegistry()
 
@@ -48,14 +48,15 @@ settings.rag_hybrid_alpha = rag_alpha
 # ---------- Main: Spec builder ----------
 st.subheader("1) Choose architecture and components")
 
-arch = st.selectbox("Architecture", ["SPN", "FEISTEL"], index=0)
+arch = st.selectbox("Architecture", ["SPN", "FEISTEL", "ARX"], index=0)
 
 colA, colB = st.columns(2)
 
 with colA:
     name = st.text_input("Cipher name", value="MyCipherV2")
     seed = st.number_input("Seed (reproducibility)", min_value=0, max_value=2**31-1, value=int(settings.global_seed), step=1)
-    rounds_default = 10 if arch == "SPN" else 16
+    # Default rounds based on architecture
+    rounds_default = 10 if arch == "SPN" else (12 if arch == "ARX" else 16)
     rounds = st.slider("Rounds", min_value=2, max_value=40, value=rounds_default, step=1)
 
 with colB:
@@ -63,7 +64,11 @@ with colB:
         block_bits = 128
         st.info("SPN template is currently fixed to 128-bit blocks (AES-like components).", icon="ℹ️")
         key_bits = st.selectbox("Key size (bits)", [128, 256], index=0)
-    else:
+    elif arch == "ARX":
+        block_bits = st.selectbox("Block size (bits)", [64, 128], index=0)
+        st.info("ARX ciphers like RC5 use 64-bit blocks, RC6 uses 128-bit.", icon="ℹ️")
+        key_bits = st.selectbox("Key size (bits)", [128, 256], index=0)
+    else:  # FEISTEL
         block_bits = st.selectbox("Block size (bits)", [64, 128], index=1)
         key_bits = st.selectbox("Key size (bits)", [128, 256], index=0)
 
@@ -83,7 +88,24 @@ if arch == "SPN":
 
     components = {"sbox": sbox_id, "perm": perm_id, "linear": lin_id, "key_schedule": ks_id}
 
-else:
+elif arch == "ARX":
+    # ARX components: modular addition and rotation
+    arx_ops = registry.list_by_kind("ARX", arch="ARX")
+    kss = registry.list_by_kind("KEY_SCHEDULE", arch="ARX")
+    
+    # Separate add and rotate operations
+    add_ops = [c for c in arx_ops if "add" in c.component_id or "mul" in c.component_id]
+    rot_ops = [c for c in arx_ops if "rotate" in c.component_id]
+    
+    arx_add_id = st.selectbox("ARX addition/multiplication", [c.component_id for c in add_ops], index=0,
+                               help="Modular addition (RC5/RC6) or multiplication (IDEA)")
+    arx_rot_id = st.selectbox("ARX rotation", [c.component_id for c in rot_ops], index=0,
+                               help="Bit rotation amount per word")
+    ks_id = st.selectbox("Key schedule", [c.component_id for c in kss], index=0)
+
+    components = {"arx_add": arx_add_id, "arx_rotate": arx_rot_id, "key_schedule": ks_id}
+
+else:  # FEISTEL
     sboxes = registry.list_by_kind("SBOX", arch="FEISTEL")
     perms = [c for c in registry.list_by_kind("PERM", arch="FEISTEL") if c.component_id == "perm.identity"]
     kss = registry.list_by_kind("KEY_SCHEDULE", arch="FEISTEL")

@@ -1,0 +1,3 @@
+conda activate crypto-cipher-lab
+
+streamlit run app/streamlit_app.py
