@@ -17,11 +17,11 @@ from cipherlab.llm.assistant import suggest_improvements
 from cipherlab.llm.openai_provider import OpenAIProvider
 
 
-st.set_page_config(page_title="Crypto Cipher Lab v2 (OpenAI)", layout="wide")
+st.set_page_config(page_title="Crypto Cipher Lab v2", layout="wide")
 
 settings = load_settings()
 
-st.title("Crypto Cipher Lab v2 — Block Cipher Builder (OpenAI)")
+st.title("Crypto Cipher Lab v2 — Block Cipher Builder")
 st.caption("Research-only lab: compose SPN/Feistel/ARX ciphers, run local metrics, and iterate improvements with hybrid RAG.")
 
 registry = ComponentRegistry()
@@ -177,7 +177,7 @@ if module_code:
         st.success(f"Saved run to: {run.run_dir}")
 
 # ---------- Improvements (RAG + OpenAI call) ----------
-st.subheader("4) Ask for improvement suggestions (uses OpenAI)")
+st.subheader("4) Ask for improvement suggestions")
 st.caption("This makes ONE model call per click. Retrieval + metrics are local.")
 
 if st.button("Suggest improvements", disabled=(not ok or not settings.openai_api_key or not metrics)):
