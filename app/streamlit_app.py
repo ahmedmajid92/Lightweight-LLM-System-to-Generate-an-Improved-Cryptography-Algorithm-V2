@@ -6,12 +6,17 @@ from typing import Dict, List, Optional
 import streamlit as st
 
 from cipherlab.config import load_settings
-from cipherlab.cipher.metrics import evaluate_and_score, heuristic_issues
+from cipherlab.cipher.metrics import evaluate_and_score, evaluate_full, heuristic_issues
 from cipherlab.cipher.registry import ComponentRegistry
 from cipherlab.cipher.spec import CipherSpec
 from cipherlab.cipher.validator import validate_spec
 from cipherlab.cipher.exporter import export_cipher_module
 from cipherlab.context_logger import build_context_snapshot
+from cipherlab.evaluation.roundtrip import run_roundtrip_tests
+from cipherlab.evaluation.report import EvaluationReport
+from cipherlab.evaluation.feedback import parse_evaluation_results, run_feedback_cycle
+from cipherlab.evaluation.avalanche import compute_sac
+from cipherlab.evaluation.sbox_analysis import analyze_all_sboxes
 from cipherlab.rag.retriever import RAGRetriever
 from cipherlab.utils.repro import make_run_dir, write_json, write_text
 from cipherlab.llm.assistant import suggest_improvements
@@ -172,6 +177,124 @@ if metrics:
             st.warning("\n".join(["- " + x for x in issues]))
         else:
             st.success("No obvious issues flagged by heuristics (still not a security claim).")
+
+# ---------- Advanced Evaluation (Phase 3) ----------
+with st.expander("Advanced evaluation (SAC + S-box analysis)", expanded=False):
+    st.caption("Deterministic cryptographic evaluation: roundtrip verification, Strict Avalanche Criterion, and S-box differential/linear analysis.")
+
+    adv_col1, adv_col2 = st.columns(2)
+    with adv_col1:
+        adv_num_vectors = st.number_input("Roundtrip test vectors", min_value=100, max_value=10000, value=1000, step=100)
+    with adv_col2:
+        adv_sac_trials = st.number_input("SAC trials per bit", min_value=50, max_value=2000, value=500, step=50)
+
+    if st.button("Run full evaluation", disabled=not ok, key="btn_full_eval"):
+        eval_report = EvaluationReport()
+
+        # Step 1: Roundtrip verification
+        with st.spinner(f"Running roundtrip tests ({adv_num_vectors} vectors)…"):
+            rt_result = run_roundtrip_tests(spec, num_vectors=int(adv_num_vectors), seed=int(seed))
+            eval_report.roundtrip_results = [rt_result]
+
+        # Step 2: SAC analysis
+        from cipherlab.cipher.builder import build_cipher as pkg_build_cipher
+        cipher_obj = pkg_build_cipher(spec)
+
+        with st.spinner(f"Computing SAC (plaintext, {adv_sac_trials} trials/bit)…"):
+            sac_pt = compute_sac(
+                cipher_obj,
+                block_size_bits=spec.block_size_bits,
+                key_size_bits=spec.key_size_bits,
+                input_type="plaintext",
+                trials=int(adv_sac_trials),
+                seed=int(seed),
+                algorithm_name=spec.name,
+                architecture=spec.architecture,
+            )
+
+        with st.spinner(f"Computing SAC (key, {adv_sac_trials} trials/bit)…"):
+            sac_key = compute_sac(
+                cipher_obj,
+                block_size_bits=spec.block_size_bits,
+                key_size_bits=spec.key_size_bits,
+                input_type="key",
+                trials=int(adv_sac_trials),
+                seed=int(seed),
+                algorithm_name=spec.name,
+                architecture=spec.architecture,
+            )
+
+        eval_report.sac_results = [sac_pt, sac_key]
+
+        # Step 3: S-box analysis
+        with st.spinner("Analyzing S-box properties (DDT/LAT)…"):
+            sbox_results = analyze_all_sboxes(registry)
+            eval_report.sbox_results = sbox_results
+
+        st.session_state["eval_report"] = eval_report
+
+    eval_report = st.session_state.get("eval_report")
+    if eval_report:
+        # Display roundtrip results
+        for rt in eval_report.roundtrip_results:
+            if rt.is_perfect:
+                st.success(rt.summary())
+            else:
+                st.error(rt.summary())
+
+        # Display SAC results
+        for sac in eval_report.sac_results:
+            if sac.passes_sac:
+                st.success(sac.summary())
+            else:
+                st.warning(sac.summary())
+
+        # Display S-box results
+        if eval_report.sbox_results:
+            st.write("**S-box Analysis:**")
+            for sb in eval_report.sbox_results:
+                st.text(sb.summary())
+
+        # Parse diagnostics
+        diagnostics = parse_evaluation_results(eval_report)
+        if diagnostics:
+            st.write(f"**{len(diagnostics)} diagnostic(s) found:**")
+            for d in diagnostics:
+                if d.severity == "critical":
+                    st.error(d.to_prompt_block())
+                else:
+                    st.warning(d.to_prompt_block())
+            st.session_state["eval_diagnostics"] = diagnostics
+        else:
+            st.success("No issues detected in advanced evaluation.")
+            st.session_state["eval_diagnostics"] = []
+
+        # Feedback synthesis button
+        has_api = bool(settings.openai_api_key or settings.openrouter_api_key)
+        if st.button("Generate AI feedback (DeepSeek-R1 / OpenAI)", disabled=not has_api, key="btn_feedback"):
+            rag_ctx = ""
+            try:
+                retriever = RAGRetriever(settings)
+                query = f"Improve {spec.architecture} lightweight block cipher (block={spec.block_size_bits}, rounds={spec.rounds})"
+                chunks = retriever.retrieve(query)
+                rag_ctx = retriever.format_for_prompt(chunks)
+            except Exception:
+                pass
+
+            spinner_msg = "Calling DeepSeek-R1 via OpenRouter…" if settings.openrouter_api_key else "Calling OpenAI…"
+            with st.spinner(spinner_msg):
+                fb_result = run_feedback_cycle(settings, spec, eval_report, rag_context=rag_ctx)
+
+            st.session_state["feedback_result"] = fb_result
+
+        fb_result = st.session_state.get("feedback_result")
+        if fb_result and fb_result.patch:
+            st.write(f"**Model used:** {fb_result.model_used}")
+            if fb_result.reasoning_trace:
+                with st.expander("DeepSeek-R1 reasoning trace"):
+                    st.text(fb_result.reasoning_trace[:3000])
+            st.write("**Suggested patch:**")
+            st.json(fb_result.patch.model_dump())
 
 st.subheader("3) Export cipher as Python code")
 
