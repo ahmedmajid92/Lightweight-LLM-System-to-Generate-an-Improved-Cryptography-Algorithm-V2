@@ -17,6 +17,8 @@ from cipherlab.evaluation.report import EvaluationReport
 from cipherlab.evaluation.feedback import parse_evaluation_results, run_feedback_cycle
 from cipherlab.evaluation.avalanche import compute_sac
 from cipherlab.evaluation.sbox_analysis import analyze_all_sboxes
+from cipherlab.evolution.ast_analyzer import detect_mismatches
+from cipherlab.evolution.dynamic_loader import evolve_all_mismatches
 from cipherlab.rag.retriever import RAGRetriever
 from cipherlab.utils.repro import make_run_dir, write_json, write_text
 from cipherlab.llm.assistant import suggest_improvements
@@ -296,6 +298,22 @@ with st.expander("Advanced evaluation (SAC + S-box analysis)", expanded=False):
             st.write("**Suggested patch:**")
             st.json(fb_result.patch.model_dump())
 
+    # I/O Compatibility Check (Phase 4)
+    st.divider()
+    st.write("**I/O Compatibility Analysis**")
+    if st.button("Check component I/O compatibility", key="btn_io_compat"):
+        io_mismatches = detect_mismatches(spec, registry)
+        if io_mismatches:
+            for mm in io_mismatches:
+                if mm.severity == "blocking":
+                    st.error(mm.summary())
+                else:
+                    st.warning(mm.summary())
+            st.session_state["io_mismatches"] = io_mismatches
+        else:
+            st.success("All components are I/O compatible with current spec.")
+            st.session_state["io_mismatches"] = []
+
 st.subheader("3) Export cipher as Python code")
 
 if st.button("Generate Python module", disabled=not ok):
@@ -363,6 +381,24 @@ if patch:
             new_spec.components.update(patch.replace_components)
         if patch.add_notes:
             new_spec.notes = (new_spec.notes + "\n" + patch.add_notes).strip()
+
+        # Phase 4: Check for I/O mismatches before applying
+        mismatches = detect_mismatches(new_spec, registry)
+        blocking = [m for m in mismatches if m.severity == "blocking"]
+        if blocking:
+            st.warning(f"Detected {len(blocking)} I/O mismatch(es). Attempting adaptive evolution...")
+            has_api = bool(settings.openai_api_key or settings.openrouter_api_key)
+            if has_api:
+                with st.spinner("Evolving components via DeepSeek-R1..."):
+                    evo_report = evolve_all_mismatches(settings, new_spec, registry)
+                if evo_report.all_resolved():
+                    st.success(f"Successfully evolved {evo_report.evolutions_succeeded} component(s).")
+                else:
+                    st.error(f"Could not adapt: {evo_report.failed_components}")
+            else:
+                for mm in blocking:
+                    st.error(mm.summary())
+                st.info("Configure an API key to enable adaptive component evolution.")
 
         ok2, errs2 = validate_spec(new_spec, registry)
         if not ok2:

@@ -361,7 +361,7 @@ def run_feedback_cycle(
             max_output_tokens=1200,
         )
 
-    return FeedbackCycleResult(
+    result = FeedbackCycleResult(
         diagnostics=diagnostics,
         prompt_system=system,
         prompt_user=user,
@@ -370,3 +370,34 @@ def run_feedback_cycle(
         model_used=model_used,
         reasoning_trace=reasoning_trace,
     )
+
+    # Step 4: Pre-patch mismatch detection and adaptive evolution
+    if patch and patch.replace_components:
+        try:
+            from cipherlab.evolution.ast_analyzer import detect_mismatches
+            from cipherlab.evolution.dynamic_loader import evolve_all_mismatches
+            from cipherlab.cipher.registry import ComponentRegistry as PkgRegistry
+
+            # Build temp spec with proposed changes
+            temp_spec = spec.model_copy(deep=True)
+            temp_spec.components.update(patch.replace_components)
+
+            pkg_reg = PkgRegistry()
+            mismatches = detect_mismatches(temp_spec, pkg_reg)
+
+            if mismatches:
+                blocking = [m for m in mismatches if m.severity == "blocking"]
+                if blocking:
+                    evo_report = evolve_all_mismatches(
+                        settings, temp_spec, pkg_reg, max_retries=2,
+                    )
+                    # Update patch to reference evolved component IDs
+                    if evo_report.all_resolved():
+                        for loaded in evo_report.evolved_components:
+                            for role, cid in patch.replace_components.items():
+                                if cid == loaded.component_id.rsplit("_evolved_", 1)[0]:
+                                    patch.replace_components[role] = loaded.component_id
+        except ImportError:
+            pass  # evolution module not available
+
+    return result
