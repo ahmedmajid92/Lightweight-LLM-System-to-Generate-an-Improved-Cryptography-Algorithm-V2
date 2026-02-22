@@ -21,17 +21,32 @@ st.set_page_config(page_title="Crypto Cipher Lab v2", layout="wide")
 
 settings = load_settings()
 
-st.title("Crypto Cipher Lab v2 — Block Cipher Builder")
-st.caption("Research-only lab: compose SPN/Feistel/ARX ciphers, run local metrics, and iterate improvements with hybrid RAG.")
+st.title("Crypto Cipher Lab v2 — Lightweight Block Cipher Builder")
+st.caption("Research-only lab: compose SPN/Feistel/ARX lightweight ciphers for IoT, run local metrics, and iterate improvements with hybrid RAG.")
 
 registry = ComponentRegistry()
 
-# ---------- Sidebar: OpenAI + RAG settings ----------
+# ---------- Sidebar: OpenAI + OpenRouter + RAG settings ----------
 st.sidebar.header("OpenAI settings")
 api_key = st.sidebar.text_input("OPENAI_API_KEY", value=settings.openai_api_key or "", type="password")
 model_fast = st.sidebar.text_input("Fast model", value=settings.openai_model_fast)
 model_quality = st.sidebar.text_input("Quality model", value=settings.openai_model_quality)
-model_for_improve = st.sidebar.selectbox("Model for improvement suggestions", [model_fast, model_quality], index=0)
+
+st.sidebar.header("DeepSeek / OpenRouter")
+if settings.openrouter_api_key:
+    openrouter_model_choice = st.sidebar.selectbox(
+        "DeepSeek model for improvements",
+        [settings.openrouter_model_fast, settings.openrouter_model_reasoning],
+        format_func=lambda m: "DeepSeek-V3 (fast)" if "v3" in m else "DeepSeek-R1 (reasoning)",
+        index=0,
+    )
+    st.sidebar.success("OpenRouter API key configured.")
+else:
+    openrouter_model_choice = None
+    st.sidebar.warning("OPENROUTER_API_KEY not set — improvements will use OpenAI.")
+
+# Fallback model for improvements when OpenRouter is not configured
+model_for_improve = st.sidebar.selectbox("Fallback OpenAI model for improvements", [model_fast, model_quality], index=0)
 
 st.sidebar.header("RAG settings")
 rag_top_k = st.sidebar.slider("Top-k KB chunks", min_value=2, max_value=12, value=settings.rag_top_k, step=1)
@@ -57,16 +72,16 @@ with colA:
     seed = st.number_input("Seed (reproducibility)", min_value=0, max_value=2**31-1, value=int(settings.global_seed), step=1)
     # Default rounds based on architecture
     rounds_default = 10 if arch == "SPN" else (12 if arch == "ARX" else 16)
-    rounds = st.slider("Rounds", min_value=2, max_value=40, value=rounds_default, step=1)
+    rounds = st.slider("Rounds", min_value=2, max_value=64, value=rounds_default, step=1)
 
 with colB:
     if arch == "SPN":
-        block_bits = 128
-        st.info("SPN template is currently fixed to 128-bit blocks (AES-like components).", icon="ℹ️")
-        key_bits = st.selectbox("Key size (bits)", [128, 256], index=0)
+        block_bits = st.selectbox("Block size (bits)", [64, 128], index=1)
+        st.info("SPN ciphers: AES (128-bit), PRESENT (64-bit), GIFT (128-bit).", icon="ℹ️")
+        key_bits = st.selectbox("Key size (bits)", [80, 128, 256], index=1)
     elif arch == "ARX":
         block_bits = st.selectbox("Block size (bits)", [64, 128], index=0)
-        st.info("ARX ciphers like RC5 use 64-bit blocks, RC6 uses 128-bit.", icon="ℹ️")
+        st.info("ARX ciphers: SPECK (64-bit), RC5 (64-bit), LEA (128-bit).", icon="ℹ️")
         key_bits = st.selectbox("Key size (bits)", [128, 256], index=0)
     else:  # FEISTEL
         block_bits = st.selectbox("Block size (bits)", [64, 128], index=1)
@@ -92,13 +107,13 @@ elif arch == "ARX":
     # ARX components: modular addition and rotation
     arx_ops = registry.list_by_kind("ARX", arch="ARX")
     kss = registry.list_by_kind("KEY_SCHEDULE", arch="ARX")
-    
+
     # Separate add and rotate operations
     add_ops = [c for c in arx_ops if "add" in c.component_id or "mul" in c.component_id]
     rot_ops = [c for c in arx_ops if "rotate" in c.component_id]
-    
+
     arx_add_id = st.selectbox("ARX addition/multiplication", [c.component_id for c in add_ops], index=0,
-                               help="Modular addition (RC5/RC6) or multiplication (IDEA)")
+                               help="Modular addition (SPECK/RC5/LEA) or multiplication (legacy)")
     arx_rot_id = st.selectbox("ARX rotation", [c.component_id for c in rot_ops], index=0,
                                help="Bit rotation amount per word")
     ks_id = st.selectbox("Key schedule", [c.component_id for c in kss], index=0)
@@ -176,7 +191,7 @@ if module_code:
             write_json(run.metrics_json, metrics)
         st.success(f"Saved run to: {run.run_dir}")
 
-# ---------- Improvements (RAG + OpenAI call) ----------
+# ---------- Improvements (RAG + DeepSeek/OpenAI call) ----------
 st.subheader("4) Ask for improvement suggestions")
 st.caption("This makes ONE model call per click. Retrieval + metrics are local.")
 
@@ -188,7 +203,7 @@ if st.button("Suggest improvements", disabled=(not ok or not settings.openai_api
         st.error(f"RAG retriever error: {e}\n\nRun: python scripts/build_kb_index.py")
         st.stop()
 
-    query = f"Improve diffusion and avalanche for a {spec.architecture} block cipher (block={spec.block_size_bits}, rounds={spec.rounds})."
+    query = f"Improve diffusion and avalanche for a {spec.architecture} lightweight block cipher (block={spec.block_size_bits}, rounds={spec.rounds})."
     if issues:
         query += " Issues: " + " ".join(issues)
 
@@ -196,7 +211,8 @@ if st.button("Suggest improvements", disabled=(not ok or not settings.openai_api
         chunks = retriever.retrieve(query)
         rag_context = retriever.format_for_prompt(chunks)
 
-    with st.spinner("Calling OpenAI for an ImprovementPatch…"):
+    spinner_msg = "Calling DeepSeek via OpenRouter…" if openrouter_model_choice else "Calling OpenAI for an ImprovementPatch…"
+    with st.spinner(spinner_msg):
         patch, raw = suggest_improvements(
             settings=settings,
             spec=spec,
@@ -204,6 +220,7 @@ if st.button("Suggest improvements", disabled=(not ok or not settings.openai_api
             issues=issues,
             rag_context=rag_context,
             model=model_for_improve,
+            openrouter_model=openrouter_model_choice,
         )
 
     st.session_state["patch"] = patch
@@ -250,9 +267,9 @@ if new_spec and new_metrics:
     st.download_button("Download patched cipher_module.py", data=module2, file_name=f"{new_spec.name}_cipher_patched.py", mime="text/plain")
 
 # ---------- RAG chat ----------
-st.subheader("5) KB Chat (block ciphers only)")
+st.subheader("5) KB Chat (lightweight block ciphers)")
 
-question = st.text_input("Ask a question about block ciphers / components / tests", value="")
+question = st.text_input("Ask a question about lightweight block ciphers / components / tests", value="")
 if st.button("Ask", disabled=(not question.strip() or not settings.openai_api_key)):
     try:
         retriever = RAGRetriever(settings)
@@ -263,7 +280,7 @@ if st.button("Ask", disabled=(not question.strip() or not settings.openai_api_ke
     chunks = retriever.retrieve(question)
     rag_context = retriever.format_for_prompt(chunks)
 
-    system = "You are a block-cipher research assistant. Use the provided KB snippets. If KB is insufficient, say so."
+    system = "You are a lightweight block-cipher research assistant focused on IoT and resource-constrained cryptography. Use the provided KB snippets. If KB is insufficient, say so."
     user = f"Question: {question}\n\nKB snippets:\n{rag_context}\n\nAnswer clearly and concisely."
     provider = OpenAIProvider(api_key=settings.openai_api_key)
     resp = provider.generate_text(model=model_fast, system=system, user=user, temperature=0.2, max_output_tokens=900)

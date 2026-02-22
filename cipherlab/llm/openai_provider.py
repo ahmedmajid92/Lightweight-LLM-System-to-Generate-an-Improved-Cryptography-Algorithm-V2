@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Optional, Type, TypeVar
 
@@ -30,16 +31,33 @@ class LLMResult:
 
 
 class OpenAIProvider:
-    """Minimal wrapper around the OpenAI Python SDK (Responses API).
+    """Wrapper around the OpenAI Python SDK supporting dual clients.
 
-    Uses `client.responses.create` for plain text, and `client.responses.parse`
-    for Structured Outputs when you pass a Pydantic model.
+    * Standard OpenAI client — uses the Responses API for chat and embeddings.
+    * OpenRouter client — uses the Chat Completions API for DeepSeek
+      code-generation / reasoning models.
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        openrouter_api_key: Optional[str] = None,
+    ):
         if OpenAI is None:
             raise RuntimeError("openai package not installed. pip install -r requirements.txt")
+        # Standard OpenAI client (for chat, embeddings)
         self.client = OpenAI(api_key=api_key)
+        # OpenRouter client (for code-generation / reasoning via DeepSeek)
+        self.openrouter_client: Optional[OpenAI] = None
+        if openrouter_api_key:
+            self.openrouter_client = OpenAI(
+                api_key=openrouter_api_key,
+                base_url="https://openrouter.ai/api/v1",
+            )
+
+    # ------------------------------------------------------------------
+    # OpenAI Responses API methods (unchanged)
+    # ------------------------------------------------------------------
 
     def generate_text(
         self,
@@ -123,3 +141,81 @@ class OpenAIProvider:
             except Exception as e:
                 last_err = e
         raise ValueError(f"Failed to parse JSON from model output: {last_err}")
+
+    # ------------------------------------------------------------------
+    # Chat Completions API methods (OpenRouter-compatible)
+    # ------------------------------------------------------------------
+
+    def generate_text_chat(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        temperature: float = 0.2,
+        max_tokens: int = 4096,
+        use_openrouter: bool = False,
+    ) -> LLMResult:
+        """Generate text via the Chat Completions API (OpenRouter-compatible)."""
+        client = self.openrouter_client if use_openrouter and self.openrouter_client else self.client
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        choice = resp.choices[0]
+        usage = LLMUsage(
+            input_tokens=getattr(resp.usage, "prompt_tokens", None) if resp.usage else None,
+            output_tokens=getattr(resp.usage, "completion_tokens", None) if resp.usage else None,
+        )
+        return LLMResult(model=model, text=choice.message.content or "", raw=resp, usage=usage)
+
+    def generate_json_chat(
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        schema: Type[T],
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        retries: int = 2,
+        use_openrouter: bool = False,
+    ) -> tuple[T, Any]:
+        """Generate structured output via Chat Completions + JSON parsing.
+
+        OpenRouter-compatible: appends the JSON schema to the system prompt
+        and validates the response with Pydantic.
+        """
+        client = self.openrouter_client if use_openrouter and self.openrouter_client else self.client
+        schema_json = json.dumps(schema.model_json_schema(), indent=2)
+        augmented_system = (
+            system
+            + "\n\nYou MUST respond with valid JSON matching this exact schema:\n"
+            + schema_json
+        )
+        last_err: Optional[Exception] = None
+        for _ in range(retries + 1):
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": augmented_system},
+                    {"role": "user", "content": user + "\n\nRespond ONLY with valid JSON. No markdown fences."},
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            text = resp.choices[0].message.content or ""
+            # Strip markdown code fences if the model wraps its output
+            text = re.sub(r"^```(?:json)?\s*", "", text.strip())
+            text = re.sub(r"\s*```$", "", text.strip())
+            try:
+                parsed = schema.model_validate_json(text)
+                return parsed, resp
+            except Exception as e:
+                last_err = e
+        raise ValueError(f"Failed to parse structured output after {retries + 1} tries: {last_err}")

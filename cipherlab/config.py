@@ -16,6 +16,11 @@ class Settings(BaseModel):
     openai_model_code: str = Field(default="gpt-5.1-codex")
     openai_embedding_model: str = Field(default="text-embedding-3-small")
 
+    # OpenRouter (DeepSeek)
+    openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
+    openrouter_model_fast: str = Field(default="deepseek/deepseek-chat-v3-0324")
+    openrouter_model_reasoning: str = Field(default="deepseek/deepseek-r1")
+
     # RAG
     rag_use_embeddings: bool = Field(default=True)
     rag_hybrid_alpha: float = Field(default=0.55, ge=0.0, le=1.0)
@@ -49,6 +54,9 @@ def load_settings() -> Settings:
         openai_model_quality=os.getenv("OPENAI_MODEL_QUALITY", "gpt-5.2"),
         openai_model_code=os.getenv("OPENAI_MODEL_CODE", "gpt-5.1-codex"),
         openai_embedding_model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+        openrouter_api_key=os.getenv("OPENROUTER_API_KEY"),
+        openrouter_model_fast=os.getenv("OPENROUTER_MODEL_FAST", "deepseek/deepseek-chat-v3-0324"),
+        openrouter_model_reasoning=os.getenv("OPENROUTER_MODEL_REASONING", "deepseek/deepseek-r1"),
         rag_use_embeddings=_bool("RAG_USE_EMBEDDINGS", True),
         rag_hybrid_alpha=float(os.getenv("RAG_HYBRID_ALPHA", "0.55")),
         rag_top_k=int(os.getenv("RAG_TOP_K", "6")),

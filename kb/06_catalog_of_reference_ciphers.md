@@ -1,23 +1,27 @@
-# Reference cipher catalog (for KB grounding)
+# Lightweight Cryptography (LWC) Reference Cipher Catalog
 
-This file is a **high-level catalog** of common block ciphers.  
-Use it for retrieval grounding, not as a claim of completeness.
+This file is a **high-level catalog** of the 12 baseline lightweight block ciphers.
+Use it for retrieval grounding in IoT and resource-constrained cryptography research.
 
-## 128-bit block ciphers (common)
-- **AES (Rijndael-128)**: SPN, 10/12/14 rounds depending on key size.
-- **Twofish**: Feistel-like with complex key-dependent S-boxes, 16 rounds.
-- **Serpent**: SPN, 32 rounds, designed with conservative security margin.
-- **Camellia**: Feistel, 18/24 rounds.
-- **SEED**: Feistel, 16 rounds.
-- **IDEA**: 64-bit block (but often grouped with classic ciphers).
+## SPN Ciphers
+- **AES (Rijndael-128)**: SPN, 128-bit blocks, 10 rounds. Universal benchmark.
+- **PRESENT**: SPN, 64-bit blocks, 31 rounds. ISO/IEC 29192-2 LWC standard (~1570 GE).
+- **GIFT-128**: SPN, 128-bit blocks, 40 rounds. Improved PRESENT design, NIST LWC finalist basis.
 
-## 64-bit block ciphers (legacy/embedded)
-- **DES**: Feistel, 16 rounds (legacy; 56-bit key).
-- **3DES**: DES applied 3 times (legacy; slow).
-- **Blowfish**: Feistel, 16 rounds (64-bit block).
-- **CAST-128**: Feistel, 12/16 rounds.
-- **RC5 / RC6**: ARX-style (add/rotate/xor), parameterized rounds.
+## Feistel Ciphers
+- **DES**: Feistel, 64-bit blocks, 16 rounds. Legacy reference (56-bit key originally).
+- **Blowfish**: Feistel, 64-bit blocks, 16 rounds. Key-dependent S-boxes.
+- **HIGHT**: Generalized Feistel, 64-bit blocks, 32 rounds. ISO/IEC 18033-4 for RFID/IoT.
+- **TEA**: Feistel, 64-bit blocks, 64 rounds. Minimal gate count, no S-boxes.
+- **XTEA**: Feistel, 64-bit blocks, 64 rounds. Improved TEA key schedule.
+- **SIMON 64/128**: Feistel (AND-rotate-XOR), 64-bit blocks, 42 rounds. NSA LWC, hardware-optimized.
 
-## Why keep this catalog
-- enables RAG to answer “compare this design to known families”
-- helps the model suggest appropriate structures for block sizes and constraints
+## ARX Ciphers
+- **SPECK 64/128**: ARX, 64-bit blocks, 27 rounds. NSA LWC, software-optimized.
+- **RC5**: ARX, 64-bit blocks, 12 rounds. Data-dependent rotations.
+- **LEA**: ARX, 128-bit blocks, 24 rounds. Korean standard, ARM-optimized.
+
+## Why this catalog
+- Enables RAG to answer "compare this design to known LWC families"
+- Helps the model suggest appropriate lightweight structures for IoT constraints
+- Covers hardware-optimized (SIMON, PRESENT, GIFT), software-optimized (SPECK, LEA), and minimal-complexity (TEA, XTEA) design paradigms

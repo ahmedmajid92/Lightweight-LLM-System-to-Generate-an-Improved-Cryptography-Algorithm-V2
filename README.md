@@ -1,6 +1,6 @@
-# 🔐 Crypto Cipher Lab v2 (OpenAI Edition)
+# 🔐 Crypto Cipher Lab v2 (Lightweight Cryptography Edition)
 
-A **research and education** sandbox for experimenting with block cipher constructions. This tool allows you to compose, analyze, and iterate on cipher designs using modular components and AI-powered suggestions.
+A **research and education** sandbox for experimenting with lightweight block cipher constructions for IoT and resource-constrained environments. This tool allows you to compose, analyze, and iterate on cipher designs using modular components and AI-powered suggestions (OpenAI + DeepSeek via OpenRouter).
 
 > ⚠️ **Important:** Nothing here is a proof of security. Do not use generated ciphers in production.
 
@@ -13,7 +13,7 @@ A **research and education** sandbox for experimenting with block cipher constru
 | **Visual Cipher Builder** | Compose SPN, Feistel, or ARX ciphers from modular components     |
 | **Local Metrics**         | Run avalanche tests without any API cost                         |
 | **RAG-Powered KB**        | Query a cryptography knowledge base (BM25 + optional embeddings) |
-| **AI Improvements**       | Get structured improvement suggestions from OpenAI               |
+| **AI Improvements**       | Get structured improvement suggestions from DeepSeek/OpenAI      |
 | **Code Export**           | Download standalone Python modules with self-tests               |
 | **Fine-Tuned Model**      | Uses a custom fine-tuned model for cipher-specific responses     |
 
@@ -25,16 +25,22 @@ The Streamlit application is organized into **5 main sections** plus a **sidebar
 
 ### 📱 Sidebar: Settings Panel
 
-The sidebar contains two configuration sections:
+The sidebar contains three configuration sections:
 
 #### OpenAI Settings
 
 | Setting                   | Description                                                  |
 | ------------------------- | ------------------------------------------------------------ |
-| **OPENAI_API_KEY**        | Your OpenAI API key (required for AI features)               |
+| **OPENAI_API_KEY**        | Your OpenAI API key (required for KB Chat)                   |
 | **Fast model**            | Model used for quick responses (default: `gpt-4.1-mini`)     |
 | **Quality model**         | Model used for complex tasks (default: `gpt-4.1`)            |
-| **Model for improvement** | Select which model to use for generating improvement patches |
+
+#### DeepSeek / OpenRouter Settings
+
+| Setting                            | Description                                                         |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| **DeepSeek model for improvements** | Choose DeepSeek-V3 (fast) or DeepSeek-R1 (reasoning)                |
+| **Fallback OpenAI model**           | Used when OPENROUTER_API_KEY is not configured                      |
 
 #### RAG Settings
 
@@ -53,9 +59,9 @@ This is where you design your cipher by selecting its fundamental building block
 
 Choose from three cipher architectures:
 
-- **SPN (Substitution-Permutation Network)**: Used by AES, Serpent. Applies substitution, permutation, and linear mixing in each round.
-- **FEISTEL**: Used by DES, Blowfish, Twofish. Splits the block in half and applies a round function.
-- **ARX (Add-Rotate-XOR)**: Used by RC5, RC6, IDEA. Uses only modular addition, rotation, and XOR.
+- **SPN (Substitution-Permutation Network)**: Used by AES, PRESENT, GIFT. Applies substitution, permutation, and linear mixing in each round.
+- **FEISTEL**: Used by DES, Blowfish, SIMON, TEA, XTEA, HIGHT. Splits the block in half and applies a round function.
+- **ARX (Add-Rotate-XOR)**: Used by SPECK, RC5, LEA. Uses only modular addition, rotation, and XOR.
 
 #### Left Column - Basic Parameters
 
@@ -79,10 +85,10 @@ Depending on the architecture, you select different components:
 **For SPN:**
 | Component | Purpose | Example Options |
 |-----------|---------|-----------------|
-| **S-box** | Non-linear substitution | `sbox.aes`, `sbox.serpent` |
-| **Permutation** | Bit/byte reordering | `perm.aes_shiftrows`, `perm.serpent` |
-| **Linear diffusion** | Spread bit changes | `linear.aes_mixcolumns`, `linear.twofish_mds` |
-| **Key schedule** | Generate round keys | `ks.sha256_kdf`, `ks.des_style` |
+| **S-box** | Non-linear substitution | `sbox.aes`, `sbox.identity` |
+| **Permutation** | Bit/byte reordering | `perm.aes_shiftrows`, `perm.identity` |
+| **Linear diffusion** | Spread bit changes | `linear.aes_mixcolumns`, `linear.identity` |
+| **Key schedule** | Generate round keys | `ks.sha256_kdf` |
 
 **For Feistel:**
 | Component | Purpose | Example Options |
@@ -94,7 +100,7 @@ Depending on the architecture, you select different components:
 **For ARX:**
 | Component | Purpose | Example Options |
 |-----------|---------|-----------------|
-| **ARX addition** | Modular addition | `arx.add_mod32`, `arx.mul_mod16` |
+| **ARX addition** | Modular addition | `arx.add_mod32` |
 | **ARX rotation** | Bit rotation | `arx.rotate_left_3`, `arx.rotate_left_5` |
 | **Key schedule** | Generate round keys | `ks.sha256_kdf` |
 
@@ -150,21 +156,21 @@ A complete Python file containing:
 
 ---
 
-### 🤖 Section 4: Ask for Improvement Suggestions (Uses OpenAI)
+### 🤖 Section 4: Ask for Improvement Suggestions (Uses DeepSeek/OpenAI)
 
 This is the AI-powered feature that suggests how to improve your cipher.
 
 #### Prerequisites
 
 - ✅ Valid cipher specification
-- ✅ OpenAI API key configured
+- ✅ OpenAI API key configured (OpenRouter key recommended for improvements)
 - ✅ Local metrics have been run
 
 #### Process
 
 1. Click **"Suggest improvements"**
 2. System retrieves relevant knowledge from the KB
-3. OpenAI generates a structured `ImprovementPatch`
+3. DeepSeek (via OpenRouter) or OpenAI generates a structured `ImprovementPatch`
 
 #### The ImprovementPatch Contains
 
@@ -187,7 +193,7 @@ Click **"Apply patch and re-evaluate"** to:
 
 ---
 
-### 💬 Section 5: KB Chat (Block Ciphers Only)
+### 💬 Section 5: KB Chat (Lightweight Block Ciphers)
 
 A conversational interface to query the cryptography knowledge base.
 
@@ -238,6 +244,11 @@ Copy `.env.example` to `.env` and set:
 ```env
 # Required
 OPENAI_API_KEY=sk-your-api-key-here
+
+# OpenRouter (DeepSeek for code-generation / reasoning)
+OPENROUTER_API_KEY=your_openrouter_key_here
+OPENROUTER_MODEL_FAST=deepseek/deepseek-chat-v3-0324
+OPENROUTER_MODEL_REASONING=deepseek/deepseek-r1
 
 # Optional (have sensible defaults)
 OPENAI_MODEL_FAST=gpt-4.1-mini
@@ -290,7 +301,7 @@ My-New-Project/
 │   │   └── validator.py      # Specification validator
 │   ├── llm/
 │   │   ├── assistant.py      # AI improvement suggestions
-│   │   └── openai_provider.py # OpenAI API wrapper
+│   │   └── openai_provider.py # OpenAI + OpenRouter dual-client API wrapper
 │   └── rag/
 │       └── retriever.py      # RAG retrieval system
 ├── data/sft/                  # Fine-tuning dataset
@@ -310,36 +321,36 @@ My-New-Project/
 
 ---
 
-## 🔧 Supported Algorithms
+## 🔧 Supported Algorithms (Lightweight Cryptography)
 
-The system supports **12 reference block cipher algorithms** across 3 architectures:
+The system supports **12 lightweight block cipher algorithms** across 3 architectures, targeting IoT and resource-constrained environments:
 
 ### SPN (Substitution-Permutation Network)
 
-| Algorithm   | Block Size | Key Size | Rounds |
-| ----------- | ---------- | -------- | ------ |
-| **AES**     | 128-bit    | 128-bit  | 10     |
-| **Serpent** | 128-bit    | 128-bit  | 32     |
+| Algorithm    | Block Size | Key Size | Rounds | Notes                              |
+| ------------ | ---------- | -------- | ------ | ---------------------------------- |
+| **AES**      | 128-bit    | 128-bit  | 10     | Universal benchmark                |
+| **PRESENT**  | 64-bit     | 128-bit  | 31     | ISO/IEC 29192-2, ~1570 GE          |
+| **GIFT**     | 128-bit    | 128-bit  | 40     | Improved PRESENT design             |
 
 ### Feistel Network
 
-| Algorithm    | Block Size | Key Size | Rounds |
-| ------------ | ---------- | -------- | ------ |
-| **DES**      | 64-bit     | 128-bit  | 16     |
-| **3DES**     | 64-bit     | 128-bit  | 48     |
-| **Blowfish** | 64-bit     | 128-bit  | 16     |
-| **Twofish**  | 128-bit    | 256-bit  | 16     |
-| **Camellia** | 128-bit    | 128-bit  | 18     |
-| **CAST-128** | 64-bit     | 128-bit  | 16     |
-| **SEED**     | 128-bit    | 128-bit  | 16     |
+| Algorithm    | Block Size | Key Size | Rounds | Notes                              |
+| ------------ | ---------- | -------- | ------ | ---------------------------------- |
+| **DES**      | 64-bit     | 128-bit  | 16     | Legacy reference                   |
+| **Blowfish** | 64-bit     | 128-bit  | 16     | Key-dependent S-boxes              |
+| **HIGHT**    | 64-bit     | 128-bit  | 32     | ISO/IEC 18033-4, RFID/IoT          |
+| **TEA**      | 64-bit     | 128-bit  | 64     | Minimal gate count                 |
+| **XTEA**     | 64-bit     | 128-bit  | 64     | Improved TEA key schedule          |
+| **SIMON**    | 64-bit     | 128-bit  | 42     | NSA LWC, hardware-optimized        |
 
 ### ARX (Add-Rotate-XOR)
 
-| Algorithm | Block Size | Key Size | Rounds |
-| --------- | ---------- | -------- | ------ |
-| **RC5**   | 64-bit     | 128-bit  | 12     |
-| **RC6**   | 128-bit    | 128-bit  | 20     |
-| **IDEA**  | 64-bit     | 128-bit  | 8      |
+| Algorithm | Block Size | Key Size | Rounds | Notes                              |
+| --------- | ---------- | -------- | ------ | ---------------------------------- |
+| **SPECK** | 64-bit     | 128-bit  | 27     | NSA LWC, software-optimized        |
+| **RC5**   | 64-bit     | 128-bit  | 12     | Data-dependent rotations           |
+| **LEA**   | 128-bit    | 128-bit  | 24     | Korean standard, ARM-optimized     |
 
 ---
 
@@ -356,28 +367,28 @@ The system supports **12 reference block cipher algorithms** across 3 architectu
 - `sbox.aes` - AES 8-bit S-box
 - `sbox.des` - DES S-boxes (S1-S8)
 - `sbox.blowfish` - Blowfish key-dependent S-boxes
-- `sbox.serpent` - Serpent 4-bit S-boxes
-- `sbox.identity` - No substitution (testing)
+- `sbox.serpent` - Serpent 4-bit S-boxes (legacy, still available)
+- `sbox.identity` - No substitution (testing / TEA/XTEA/SIMON)
 
 ### Permutations (4)
 
 - `perm.aes_shiftrows` - AES ShiftRows
 - `perm.des_ip` - DES Initial Permutation
-- `perm.serpent` - Serpent bit permutation
+- `perm.serpent` - Serpent bit permutation (legacy, still available)
 - `perm.identity` - No permutation
 
 ### Linear Layers (3)
 
 - `linear.aes_mixcolumns` - AES MixColumns
-- `linear.twofish_mds` - Twofish MDS matrix
+- `linear.twofish_mds` - Twofish MDS matrix (legacy, still available)
 - `linear.identity` - No mixing
 
 ### ARX Operations (4)
 
-- `arx.add_mod32` - Modular addition (32-bit words)
-- `arx.rotate_left_3` - RC5-style rotation
-- `arx.rotate_left_5` - RC6/IDEA-style rotation
-- `arx.mul_mod16` - IDEA multiplication mod 2^16+1
+- `arx.add_mod32` - Modular addition (32-bit words, used by SPECK/RC5/LEA)
+- `arx.rotate_left_3` - RC5/SPECK-style rotation
+- `arx.rotate_left_5` - LEA-style rotation
+- `arx.mul_mod16` - IDEA multiplication mod 2^16+1 (legacy, still available)
 
 ---
 

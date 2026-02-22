@@ -22,49 +22,49 @@ VALID_FILE = OUTPUT_DIR / "valid.jsonl"
 TRAIN_SIZE = 450
 VALID_SIZE = 50
 
-# All 12 algorithms with their specifications
+# All 12 Lightweight Cryptography (LWC) algorithms with their specifications
 ALGORITHMS = {
-    "AES": {"arch": "SPN", "block": 128, "key": [128, 256], "rounds": [10, 12, 14]},
-    "DES": {"arch": "FEISTEL", "block": 64, "key": [128], "rounds": [16]},
-    "3DES": {"arch": "FEISTEL", "block": 64, "key": [128], "rounds": [48]},
-    "Blowfish": {"arch": "FEISTEL", "block": 64, "key": [128, 256], "rounds": [16]},
-    "Twofish": {"arch": "FEISTEL", "block": 128, "key": [128, 256], "rounds": [16]},
-    "Serpent": {"arch": "SPN", "block": 128, "key": [128, 256], "rounds": [32]},
-    "Camellia": {"arch": "FEISTEL", "block": 128, "key": [128, 256], "rounds": [18, 24]},
-    "CAST-128": {"arch": "FEISTEL", "block": 64, "key": [128], "rounds": [12, 16]},
-    "IDEA": {"arch": "ARX", "block": 64, "key": [128], "rounds": [8]},
-    "SEED": {"arch": "FEISTEL", "block": 128, "key": [128], "rounds": [16]},
-    "RC5": {"arch": "ARX", "block": 64, "key": [128], "rounds": [12, 16, 20]},
-    "RC6": {"arch": "ARX", "block": 128, "key": [128, 256], "rounds": [20]},
+    "AES":      {"arch": "SPN",     "block": 128, "key": [128],      "rounds": [10]},
+    "PRESENT":  {"arch": "SPN",     "block": 64,  "key": [80, 128],  "rounds": [31]},
+    "GIFT":     {"arch": "SPN",     "block": 128, "key": [128],      "rounds": [40]},
+    "DES":      {"arch": "FEISTEL", "block": 64,  "key": [128],      "rounds": [16]},
+    "Blowfish": {"arch": "FEISTEL", "block": 64,  "key": [128],      "rounds": [16]},
+    "HIGHT":    {"arch": "FEISTEL", "block": 64,  "key": [128],      "rounds": [32]},
+    "TEA":      {"arch": "FEISTEL", "block": 64,  "key": [128],      "rounds": [64]},
+    "XTEA":     {"arch": "FEISTEL", "block": 64,  "key": [128],      "rounds": [64]},
+    "SIMON":    {"arch": "FEISTEL", "block": 64,  "key": [128],      "rounds": [42]},
+    "SPECK":    {"arch": "ARX",     "block": 64,  "key": [128],      "rounds": [27]},
+    "RC5":      {"arch": "ARX",     "block": 64,  "key": [128],      "rounds": [12, 16, 20]},
+    "LEA":      {"arch": "ARX",     "block": 128, "key": [128],      "rounds": [24]},
 }
 
-# Components by architecture
+# Components by architecture (aligned with LWC focus)
 SPN_COMPONENTS = {
-    "sbox": ["sbox.aes", "sbox.serpent"],
-    "perm": ["perm.aes_shiftrows", "perm.serpent", "perm.identity"],
+    "sbox": ["sbox.aes", "sbox.identity"],
+    "perm": ["perm.aes_shiftrows", "perm.identity"],
     "linear": ["linear.aes_mixcolumns", "linear.identity"],
     "key_schedule": ["ks.sha256_kdf"],
 }
 
 FEISTEL_COMPONENTS = {
     "f_sbox": ["sbox.aes", "sbox.des", "sbox.blowfish", "sbox.identity"],
-    "f_perm": ["perm.identity", "perm.des_ip"],
+    "f_perm": ["perm.identity"],
     "key_schedule": ["ks.sha256_kdf", "ks.des_style", "ks.blowfish_style"],
 }
 
 ARX_COMPONENTS = {
-    "arx_add": ["arx.add_mod32", "arx.mul_mod16"],
+    "arx_add": ["arx.add_mod32"],
     "arx_rotate": ["arx.rotate_left_3", "arx.rotate_left_5"],
     "key_schedule": ["ks.sha256_kdf"],
 }
 
-# System prompts
+# System prompts (LWC-focused)
 SYSTEM_PROMPTS = {
-    "spec": "You generate CipherSpec JSON for Crypto Cipher Lab v2. Output ONLY valid JSON for CipherSpec. Include helpful comments in the notes field.",
-    "patch": "You generate ImprovementPatch JSON for Crypto Cipher Lab v2. Output ONLY valid JSON for ImprovementPatch. Provide clear rationale for improvements.",
-    "code": "You write Python code for Crypto Cipher Lab v2. Include detailed comments explaining each step. No markdown, just raw Python code.",
-    "tutor": "You are a careful cryptography tutor and block-cipher engineer. Stay accurate and avoid unsupported security claims. For research/education only.",
-    "qa": "You answer questions about block ciphers clearly and accurately. Reference specific algorithms and components when relevant. For research/education only.",
+    "spec": "You generate CipherSpec JSON for Crypto Cipher Lab v2 (Lightweight Cryptography edition). The 12 baseline LWC algorithms are: AES, DES, SIMON, SPECK, PRESENT, TEA, XTEA, RC5, Blowfish, HIGHT, LEA, GIFT. Output ONLY valid JSON for CipherSpec. Include helpful comments in the notes field.",
+    "patch": "You generate ImprovementPatch JSON for Crypto Cipher Lab v2 (Lightweight Cryptography edition). Consider IoT constraints (gate count, power, memory). Output ONLY valid JSON for ImprovementPatch. Provide clear rationale for improvements.",
+    "code": "You write Python code for Crypto Cipher Lab v2 (Lightweight Cryptography edition). Include detailed comments explaining each step. No markdown, just raw Python code.",
+    "tutor": "You are a careful cryptography tutor specializing in lightweight block ciphers for IoT and resource-constrained environments. The 12 baseline LWC algorithms are: AES, DES, SIMON, SPECK, PRESENT, TEA, XTEA, RC5, Blowfish, HIGHT, LEA, GIFT. Stay accurate and avoid unsupported security claims. For research/education only.",
+    "qa": "You answer questions about lightweight block ciphers clearly and accurately. Reference specific LWC algorithms (AES, SIMON, SPECK, PRESENT, TEA, XTEA, RC5, Blowfish, HIGHT, LEA, GIFT, DES) and components when relevant. For research/education only.",
 }
 
 
@@ -323,7 +323,7 @@ def gen_summary_example(algo: str) -> Dict:
 ## Core Structure and Components
 - {component_notes[arch]}
 - Key schedule derives round keys from master key
-- {'Input/output whitening (XOR with key)' if algo in ['Twofish', 'IDEA'] else 'Standard round key addition'}
+- {'Designed for ultra-low gate count (IoT/RFID)' if algo in ['PRESENT', 'GIFT', 'SIMON', 'HIGHT'] else 'Standard round key addition'}
 
 ## Practical Notes / Caveats
 - {'Widely standardized (NIST FIPS 197)' if algo == 'AES' else 'Designed for research/comparison purposes'}
@@ -405,19 +405,19 @@ def gen_qa_example(seed: int) -> Dict:
 - Identity components (sbox.identity, perm.identity) produce poor avalanche (~0.0-0.3)
 
 **Improving Avalanche:**
-1. Use nonlinear S-boxes (sbox.aes, sbox.serpent)
-2. Add strong linear diffusion (linear.aes_mixcolumns, linear.twofish_mds)
+1. Use nonlinear S-boxes (sbox.aes)
+2. Add strong linear diffusion (linear.aes_mixcolumns)
 3. Increase round count
 """),
         ("What's the difference between SPN and Feistel architectures?",
          """**SPN (Substitution-Permutation Network):**
-- Used by: AES, Serpent
+- Used by: AES, PRESENT, GIFT
 - Structure: S-box → Permutation → Linear diffusion → Round key (repeat)
 - Invertibility: Requires all components to be invertible
 - Example flow: SubBytes → ShiftRows → MixColumns → AddRoundKey
 
 **Feistel Network:**
-- Used by: DES, Blowfish, Twofish, Camellia
+- Used by: DES, Blowfish, SIMON, TEA, XTEA, HIGHT
 - Structure: Split block in half, L[i+1] = R[i], R[i+1] = L[i] XOR F(R[i], K[i])
 - Invertibility: Automatic! F function doesn't need to be invertible
 - Decryption: Use round keys in reverse order
@@ -434,7 +434,7 @@ def gen_qa_example(seed: int) -> Dict:
 """),
         ("How do ARX ciphers differ from S-box based ciphers?",
          """**ARX (Add-Rotate-XOR) Ciphers:**
-- Used by: RC5, RC6, ChaCha, IDEA
+- Used by: SPECK, RC5, LEA
 - Operations: Modular addition, bitwise rotation, XOR
 - No lookup tables (S-boxes)
 
@@ -455,9 +455,10 @@ def gen_qa_example(seed: int) -> Dict:
 | Diffusion | Via linear layer | Via rotation/mixing |
 
 **In Crypto Cipher Lab:**
-- ARX components: `arx.add_mod32`, `arx.rotate_left_5`, `arx.mul_mod16`
-- IDEA uses multiplication mod 2^16+1 for nonlinearity
-- RC5/RC6 use data-dependent rotations
+- ARX components: `arx.add_mod32`, `arx.rotate_left_5`, `arx.rotate_left_3`
+- SPECK uses add-rotate-XOR optimized for software/IoT
+- RC5 uses data-dependent rotations
+- LEA uses 128-bit ARX optimized for low-power implementations
 
 Note: ARX analysis is harder due to mixing arithmetic and bitwise operations.
 """),
@@ -487,7 +488,6 @@ Note: ARX analysis is harder due to mixing arithmetic and bitwise operations.
 |-----------|------|-------|
 | `sbox.aes` | 8×8 | Affine transformation over GF(2^8) inverse |
 | `sbox.des` | 6×4 | DES S1-S8, not bijective |
-| `sbox.serpent` | 4×4 | Eight different 4-bit S-boxes |
 | `sbox.blowfish` | 8×32 | Key-dependent, generated from pi digits |
 
 **For Research:** The `sbox.identity` (S[x] = x) is useful as a control to measure how much S-boxes contribute to avalanche.

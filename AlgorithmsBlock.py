@@ -438,7 +438,7 @@ def export_standalone_module(spec: CipherSpec) -> str:
 
 
 # ============================================================================
-# ALGORITHM LIBRARY - All 12 Reference Algorithms
+# ALGORITHM LIBRARY - All 12 Lightweight Cryptography (LWC) Reference Algorithms
 # ============================================================================
 
 ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
@@ -454,22 +454,37 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
             "linear": "linear.aes_mixcolumns",
             "key_schedule": "ks.sha256_kdf"
         },
-        "notes": "AES-128 template using genuine AES S-box, ShiftRows, and MixColumns.",
+        "notes": "AES-128 universal benchmark. Genuine AES S-box, ShiftRows, and MixColumns.",
     },
-    "Serpent": {
+    "PRESENT": {
         "architecture": "SPN",
-        "block_size_bits": 128,
+        "block_size_bits": 128,  # Real PRESENT uses 64-bit blocks; 128 here for SPN builder compat
         "key_size_bits": 128,
-        "rounds": 32,
+        "rounds": 31,
         "components": {
-            "sbox": "sbox.serpent",
-            "perm": "perm.serpent",
+            "sbox": "sbox.aes",        # placeholder — real PRESENT uses a 4-bit S-box
+            "perm": "perm.identity",    # placeholder — real PRESENT uses a 64-bit bit permutation
             "linear": "linear.identity",
             "key_schedule": "ks.sha256_kdf"
         },
-        "notes": "Serpent template using Serpent 4-bit S-boxes. 32 rounds for high security margin.",
+        "notes": "PRESENT (ISO/IEC 29192-2) LWC standard. Real PRESENT: 64-bit blocks, 4-bit S-box. "
+                 "Set to 128-bit here for SPN builder compatibility. Phase 2 will add native 64-bit SPN.",
     },
-    
+    "GIFT": {
+        "architecture": "SPN",
+        "block_size_bits": 128,
+        "key_size_bits": 128,
+        "rounds": 40,
+        "components": {
+            "sbox": "sbox.aes",        # placeholder — real GIFT uses a 4-bit S-box
+            "perm": "perm.identity",    # placeholder — real GIFT uses a bit permutation
+            "linear": "linear.identity",
+            "key_schedule": "ks.sha256_kdf"
+        },
+        "notes": "GIFT-128 lightweight SPN cipher. Improved PRESENT design with efficient bit permutation. "
+                 "Placeholder components — dedicated GIFT S-box/perm to be added in Phase 2.",
+    },
+
     # ========== FEISTEL ALGORITHMS ==========
     "DES": {
         "architecture": "FEISTEL",
@@ -481,19 +496,7 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
             "f_perm": "perm.identity",
             "key_schedule": "ks.des_style"
         },
-        "notes": "DES template using DES S-boxes (S1-S8). 64-bit blocks have birthday-bound limits.",
-    },
-    "3DES": {
-        "architecture": "FEISTEL",
-        "block_size_bits": 64,
-        "key_size_bits": 128,  # Two-key 3DES
-        "rounds": 48,  # 3 × 16 DES rounds
-        "components": {
-            "f_sbox": "sbox.des",
-            "f_perm": "perm.identity",
-            "key_schedule": "ks.des_style"
-        },
-        "notes": "Triple DES (EDE mode) template. 48 total rounds. Still limited by 64-bit block size.",
+        "notes": "DES template using DES S-boxes (S1-S8). Legacy reference. 64-bit blocks.",
     },
     "Blowfish": {
         "architecture": "FEISTEL",
@@ -507,57 +510,72 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
         },
         "notes": "Blowfish template with key-dependent S-boxes and P-array key schedule.",
     },
-    "Twofish": {
-        "architecture": "FEISTEL",
-        "block_size_bits": 128,
-        "key_size_bits": 256,
-        "rounds": 16,
-        "components": {
-            "f_sbox": "sbox.aes",
-            "f_perm": "perm.identity",
-            "linear": "linear.twofish_mds",
-            "key_schedule": "ks.sha256_kdf"
-        },
-        "notes": "Twofish template using MDS matrix diffusion. AES finalist with 128-bit blocks.",
-    },
-    "Camellia": {
-        "architecture": "FEISTEL",
-        "block_size_bits": 128,
-        "key_size_bits": 128,
-        "rounds": 18,
-        "components": {
-            "f_sbox": "sbox.aes",
-            "f_perm": "perm.identity",
-            "key_schedule": "ks.sha256_kdf"
-        },
-        "notes": "Camellia template. Japanese/EU standard cipher, similar structure to AES but Feistel.",
-    },
-    "CAST-128": {
+    "HIGHT": {
         "architecture": "FEISTEL",
         "block_size_bits": 64,
         "key_size_bits": 128,
-        "rounds": 16,
+        "rounds": 32,
         "components": {
-            "f_sbox": "sbox.aes",
+            "f_sbox": "sbox.aes",      # placeholder — real HIGHT uses addition/rotation in F
             "f_perm": "perm.identity",
             "key_schedule": "ks.sha256_kdf"
         },
-        "notes": "CAST-128 template. Used in PGP. 64-bit blocks, variable rounds (12 or 16).",
+        "notes": "HIGHT (ISO/IEC 18033-4) lightweight cipher for RFID/IoT. Generalized Feistel with "
+                 "ARX-style F-function. Placeholder components — dedicated HIGHT F-function in Phase 2.",
     },
-    "SEED": {
+    "TEA": {
         "architecture": "FEISTEL",
-        "block_size_bits": 128,
+        "block_size_bits": 64,
         "key_size_bits": 128,
-        "rounds": 16,
+        "rounds": 64,
         "components": {
-            "f_sbox": "sbox.aes",
+            "f_sbox": "sbox.identity",  # TEA uses no S-box, pure ARX F-function
             "f_perm": "perm.identity",
             "key_schedule": "ks.sha256_kdf"
         },
-        "notes": "SEED template. Korean standard cipher. 128-bit blocks, Feistel structure.",
+        "notes": "Tiny Encryption Algorithm. Minimal gate count Feistel cipher with 64 rounds (32 cycles). "
+                 "Uses delta constant 0x9E3779B9. Placeholder — dedicated TEA F-function in Phase 2.",
     },
-    
+    "XTEA": {
+        "architecture": "FEISTEL",
+        "block_size_bits": 64,
+        "key_size_bits": 128,
+        "rounds": 64,
+        "components": {
+            "f_sbox": "sbox.identity",  # XTEA uses no S-box, pure ARX F-function
+            "f_perm": "perm.identity",
+            "key_schedule": "ks.sha256_kdf"
+        },
+        "notes": "Extended TEA. Improved key schedule over TEA to resist related-key attacks. "
+                 "64 rounds (32 cycles). Placeholder — dedicated XTEA F-function in Phase 2.",
+    },
+    "SIMON": {
+        "architecture": "FEISTEL",
+        "block_size_bits": 64,
+        "key_size_bits": 128,
+        "rounds": 42,
+        "components": {
+            "f_sbox": "sbox.identity",  # SIMON uses AND-rotate-XOR, no S-box
+            "f_perm": "perm.identity",
+            "key_schedule": "ks.sha256_kdf"
+        },
+        "notes": "SIMON 64/128 (NSA LWC family). AND-rotate-XOR Feistel structure optimized for "
+                 "hardware. Placeholder — dedicated SIMON F-function in Phase 2.",
+    },
+
     # ========== ARX ALGORITHMS ==========
+    "SPECK": {
+        "architecture": "ARX",
+        "block_size_bits": 64,
+        "key_size_bits": 128,
+        "rounds": 27,
+        "components": {
+            "arx_add": "arx.add_mod32",
+            "arx_rotate": "arx.rotate_left_3",
+            "key_schedule": "ks.sha256_kdf"
+        },
+        "notes": "SPECK 64/128 (NSA LWC family). Add-rotate-XOR structure optimized for software/IoT.",
+    },
     "RC5": {
         "architecture": "ARX",
         "block_size_bits": 64,
@@ -570,29 +588,18 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
         },
         "notes": "RC5-32/12/16 template. Simple ARX cipher with data-dependent rotations.",
     },
-    "RC6": {
+    "LEA": {
         "architecture": "ARX",
         "block_size_bits": 128,
         "key_size_bits": 128,
-        "rounds": 20,
+        "rounds": 24,
         "components": {
             "arx_add": "arx.add_mod32",
             "arx_rotate": "arx.rotate_left_5",
             "key_schedule": "ks.sha256_kdf"
         },
-        "notes": "RC6 template. AES finalist, extends RC5 with integer multiplication for rotation amounts.",
-    },
-    "IDEA": {
-        "architecture": "ARX",
-        "block_size_bits": 64,
-        "key_size_bits": 128,
-        "rounds": 8,
-        "components": {
-            "arx_add": "arx.mul_mod16",
-            "arx_rotate": "arx.rotate_left_5",
-            "key_schedule": "ks.sha256_kdf"
-        },
-        "notes": "IDEA template. Uses multiplication mod 2^16+1, addition mod 2^16, and XOR.",
+        "notes": "LEA (Lightweight Encryption Algorithm). Korean standard (KCSA). 128-bit ARX cipher "
+                 "designed for low-power software implementations.",
     },
 }
 
@@ -601,7 +608,7 @@ def get_template(name: str, *, override_name: Optional[str] = None, seed: int = 
     """Get a predefined algorithm template as a CipherSpec.
     
     Args:
-        name: Algorithm name (e.g., "AES", "DES", "Blowfish")
+        name: Algorithm name (e.g., "AES", "SPECK", "SIMON")
         override_name: Optional custom name for the spec
         seed: Random seed for reproducibility
         

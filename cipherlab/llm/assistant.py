@@ -11,12 +11,15 @@ from ..cipher.spec import CipherSpec, ImprovementPatch
 from .openai_provider import OpenAIProvider
 
 
-SYSTEM_IMPROVER = """You are a cryptography research assistant focused on BLOCK CIPHERS.
-You help improve *research prototype* ciphers constructed from components (SPN or Feistel).
+SYSTEM_IMPROVER = """You are a cryptography research assistant focused on LIGHTWEIGHT BLOCK CIPHERS for IoT and resource-constrained environments.
+You help improve *research prototype* ciphers constructed from components (SPN, Feistel, or ARX).
+
+The 12 baseline LWC algorithms are: AES, DES, SIMON, SPECK, PRESENT, TEA, XTEA, RC5, Blowfish, HIGHT, LEA, GIFT.
 
 Rules:
 - Do NOT claim security. You can recommend design changes, but must phrase as hypotheses.
-- Prefer changes that improve diffusion/confusion while keeping implementation simple.
+- Prefer changes that improve diffusion/confusion while keeping implementation lightweight and efficient.
+- Consider hardware gate count, power consumption, and memory footprint as design constraints.
 - Respect the cipher architecture constraints.
 - Output must match the provided schema exactly (Structured Outputs).
 """
@@ -30,8 +33,12 @@ def suggest_improvements(
     issues: List[str],
     rag_context: str,
     model: str,
+    openrouter_model: Optional[str] = None,
 ) -> tuple[ImprovementPatch, Any]:
-    provider = OpenAIProvider(api_key=settings.openai_api_key)
+    provider = OpenAIProvider(
+        api_key=settings.openai_api_key,
+        openrouter_api_key=settings.openrouter_api_key,
+    )
 
     user = (
         "Current cipher spec (JSON):\n"
@@ -54,12 +61,24 @@ def suggest_improvements(
         + "- f_perm: perm.identity\n"
     )
 
-    patch, raw = provider.generate_structured(
-        model=model,
-        system=SYSTEM_IMPROVER,
-        user=user,
-        schema=ImprovementPatch,
-        temperature=0.2,
-        max_output_tokens=800,
-    )
+    # Use OpenRouter (DeepSeek) if configured, else fall back to OpenAI
+    if provider.openrouter_client and openrouter_model:
+        patch, raw = provider.generate_json_chat(
+            model=openrouter_model,
+            system=SYSTEM_IMPROVER,
+            user=user,
+            schema=ImprovementPatch,
+            temperature=0.2,
+            max_tokens=4096,
+            use_openrouter=True,
+        )
+    else:
+        patch, raw = provider.generate_structured(
+            model=model,
+            system=SYSTEM_IMPROVER,
+            user=user,
+            schema=ImprovementPatch,
+            temperature=0.2,
+            max_output_tokens=800,
+        )
     return patch, raw
