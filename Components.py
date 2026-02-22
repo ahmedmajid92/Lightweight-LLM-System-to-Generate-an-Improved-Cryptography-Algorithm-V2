@@ -59,6 +59,39 @@ def words_to_bytes(words: List[int], word_size: int = 4, byteorder: str = 'littl
 
 
 # ============================================================================
+# CIPHER CONFIGURATION
+# ============================================================================
+
+@dataclass
+class CipherConfiguration:
+    """Runtime configuration that parameterizes all cipher components."""
+    block_size_bits: int      # 64 or 128
+    key_size_bits: int        # 80, 128, or 256
+    rounds: int               # algorithm-specific
+    word_size: int = 32       # bits per word (16 for PRESENT/GIFT-64, 32 for most)
+
+    @property
+    def block_size_bytes(self) -> int:
+        return self.block_size_bits // 8
+
+    @property
+    def key_size_bytes(self) -> int:
+        return self.key_size_bits // 8
+
+    @property
+    def num_words(self) -> int:
+        return self.block_size_bits // self.word_size
+
+    @property
+    def word_mask(self) -> int:
+        return (1 << self.word_size) - 1
+
+    @property
+    def word_bytes(self) -> int:
+        return self.word_size // 8
+
+
+# ============================================================================
 # KEY SCHEDULES
 # ============================================================================
 
@@ -658,6 +691,250 @@ def arx_mul_mod16_inv(data: bytes) -> bytes:
 
 
 # ============================================================================
+# ARX FACTORY FUNCTIONS (parameterized by word_size)
+# ============================================================================
+
+def make_arx_add(cfg: CipherConfiguration):
+    """Factory: return (forward, inverse) for modular addition at cfg.word_size."""
+    ws = cfg.word_size // 8  # word size in bytes
+    mask = cfg.word_mask
+
+    def add_fwd(data: bytes) -> bytes:
+        words = bytes_to_words(data, ws, 'little')
+        result = []
+        for i in range(0, len(words), 2):
+            if i + 1 < len(words):
+                result.append((words[i] + words[i + 1]) & mask)
+                result.append(words[i + 1])
+            else:
+                result.append(words[i])
+        return words_to_bytes(result, ws, 'little')
+
+    def add_inv(data: bytes) -> bytes:
+        words = bytes_to_words(data, ws, 'little')
+        result = []
+        for i in range(0, len(words), 2):
+            if i + 1 < len(words):
+                result.append((words[i] - words[i + 1]) & mask)
+                result.append(words[i + 1])
+            else:
+                result.append(words[i])
+        return words_to_bytes(result, ws, 'little')
+
+    return add_fwd, add_inv
+
+
+def make_arx_rotate(cfg: CipherConfiguration, amount: int):
+    """Factory: return (forward, inverse) for rotation at cfg.word_size."""
+    ws = cfg.word_size // 8
+    w = cfg.word_size
+
+    def rot_fwd(data: bytes) -> bytes:
+        words = bytes_to_words(data, ws, 'little')
+        return words_to_bytes([rotate_left(x, amount, w) for x in words], ws, 'little')
+
+    def rot_inv(data: bytes) -> bytes:
+        words = bytes_to_words(data, ws, 'little')
+        return words_to_bytes([rotate_right(x, amount, w) for x in words], ws, 'little')
+
+    return rot_fwd, rot_inv
+
+
+# ============================================================================
+# PRESENT COMPONENTS (4-bit S-box + 64-bit bit permutation)
+# ============================================================================
+
+PRESENT_SBOX = [0xC, 0x5, 0x6, 0xB, 0x9, 0x0, 0xA, 0xD,
+                0x3, 0xE, 0xF, 0x8, 0x4, 0x7, 0x1, 0x2]
+PRESENT_INV_SBOX = [0] * 16
+for _i, _v in enumerate(PRESENT_SBOX):
+    PRESENT_INV_SBOX[_v] = _i
+
+
+def sbox_present(data: bytes) -> bytes:
+    """PRESENT 4-bit S-box applied nibble-by-nibble (ISO/IEC 29192-2)."""
+    result = bytearray(len(data))
+    for i, byte in enumerate(data):
+        lo = PRESENT_SBOX[byte & 0x0F]
+        hi = PRESENT_SBOX[(byte >> 4) & 0x0F]
+        result[i] = (hi << 4) | lo
+    return bytes(result)
+
+
+def sboxinv_present(data: bytes) -> bytes:
+    """Inverse PRESENT 4-bit S-box."""
+    result = bytearray(len(data))
+    for i, byte in enumerate(data):
+        lo = PRESENT_INV_SBOX[byte & 0x0F]
+        hi = PRESENT_INV_SBOX[(byte >> 4) & 0x0F]
+        result[i] = (hi << 4) | lo
+    return bytes(result)
+
+
+# PRESENT bit permutation: P(i) = (16*i) mod 63 for i<63, P(63)=63
+PRESENT_PERM = [0] * 64
+for _i in range(64):
+    PRESENT_PERM[_i] = (_i * 16) % 63 if _i < 63 else 63
+
+PRESENT_INV_PERM = [0] * 64
+for _i in range(64):
+    PRESENT_INV_PERM[PRESENT_PERM[_i]] = _i
+
+
+def perm_present(data: bytes) -> bytes:
+    """PRESENT 64-bit bit permutation. P(i) = (16*i) mod 63 for i<63, P(63)=63."""
+    if len(data) != 8:
+        raise ValueError("perm_present requires 8-byte (64-bit) input")
+    val = int.from_bytes(data, 'big')
+    out = 0
+    for i in range(64):
+        if val & (1 << (63 - i)):
+            out |= (1 << (63 - PRESENT_PERM[i]))
+    return out.to_bytes(8, 'big')
+
+
+def perm_present_inv(data: bytes) -> bytes:
+    """Inverse PRESENT bit permutation."""
+    if len(data) != 8:
+        raise ValueError("perm_present_inv requires 8-byte (64-bit) input")
+    val = int.from_bytes(data, 'big')
+    out = 0
+    for i in range(64):
+        if val & (1 << (63 - i)):
+            out |= (1 << (63 - PRESENT_INV_PERM[i]))
+    return out.to_bytes(8, 'big')
+
+
+# ============================================================================
+# GIFT-128 COMPONENTS (4-bit S-box + 128-bit bit permutation)
+# ============================================================================
+
+GIFT_SBOX = [0x1, 0xA, 0x4, 0xC, 0x6, 0xF, 0x3, 0x9,
+             0x2, 0xD, 0xB, 0x7, 0x5, 0x0, 0x8, 0xE]
+GIFT_INV_SBOX = [0] * 16
+for _i, _v in enumerate(GIFT_SBOX):
+    GIFT_INV_SBOX[_v] = _i
+
+
+def sbox_gift(data: bytes) -> bytes:
+    """GIFT 4-bit S-box applied nibble-by-nibble (GIFT-128 specification)."""
+    result = bytearray(len(data))
+    for i, byte in enumerate(data):
+        lo = GIFT_SBOX[byte & 0x0F]
+        hi = GIFT_SBOX[(byte >> 4) & 0x0F]
+        result[i] = (hi << 4) | lo
+    return bytes(result)
+
+
+def sboxinv_gift(data: bytes) -> bytes:
+    """Inverse GIFT 4-bit S-box."""
+    result = bytearray(len(data))
+    for i, byte in enumerate(data):
+        lo = GIFT_INV_SBOX[byte & 0x0F]
+        hi = GIFT_INV_SBOX[(byte >> 4) & 0x0F]
+        result[i] = (hi << 4) | lo
+    return bytes(result)
+
+
+# GIFT-128 permutation table (128 entries, from GIFT specification)
+GIFT_PERM_128 = [
+     0,  33,  66,  99,   2,  35,  68, 101,   4,  37,  70, 103,   6,  39,  72, 105,
+     8,  41,  74, 107,  10,  43,  76, 109,  12,  45,  78, 111,  14,  47,  80, 113,
+    16,  49,  82, 115,  18,  51,  84, 117,  20,  53,  86, 119,  22,  55,  88, 121,
+    24,  57,  90, 123,  26,  59,  92, 125,  28,  61,  94, 127,  30,  63,  64,  97,
+    32,   1,  98,  67,  34,   3, 100,  69,  36,   5, 102,  71,  38,   7, 104,  73,
+    40,   9, 106,  75,  42,  11, 108,  77,  44,  13, 110,  79,  46,  15, 112,  81,
+    48,  17, 114,  83,  50,  19, 116,  85,  52,  21, 118,  87,  54,  23, 120,  89,
+    56,  25, 122,  91,  58,  27, 124,  93,  60,  29, 126,  95,  62,  31,  96,  65,
+]
+GIFT_INV_PERM_128 = [0] * 128
+for _i, _v in enumerate(GIFT_PERM_128):
+    GIFT_INV_PERM_128[_v] = _i
+
+
+def perm_gift(data: bytes) -> bytes:
+    """GIFT-128 bit permutation (128-bit / 16-byte)."""
+    if len(data) != 16:
+        raise ValueError("perm_gift requires 16-byte (128-bit) input")
+    val = int.from_bytes(data, 'big')
+    out = 0
+    for i in range(128):
+        if val & (1 << (127 - i)):
+            out |= (1 << (127 - GIFT_PERM_128[i]))
+    return out.to_bytes(16, 'big')
+
+
+def perm_gift_inv(data: bytes) -> bytes:
+    """Inverse GIFT-128 bit permutation."""
+    if len(data) != 16:
+        raise ValueError("perm_gift_inv requires 16-byte (128-bit) input")
+    val = int.from_bytes(data, 'big')
+    out = 0
+    for i in range(128):
+        if val & (1 << (127 - i)):
+            out |= (1 << (127 - GIFT_INV_PERM_128[i]))
+    return out.to_bytes(16, 'big')
+
+
+# ============================================================================
+# FEISTEL F-FUNCTIONS (TEA, XTEA, SIMON, HIGHT)
+# ============================================================================
+
+def sbox_tea_f(data: bytes) -> bytes:
+    """TEA-style F-function: shift-add-XOR on 32-bit words.
+    F(x) = ((x<<4) ^ (x>>5)) + x  (simplified, key mixing done externally by Feistel)
+    """
+    words = bytes_to_words(data, 4, 'little')
+    result = []
+    for w in words:
+        shifted = (((w << 4) & 0xFFFFFFFF) ^ ((w >> 5) & 0xFFFFFFFF))
+        result.append((shifted + w) & 0xFFFFFFFF)
+    return words_to_bytes(result, 4, 'little')
+
+
+def sbox_xtea_f(data: bytes) -> bytes:
+    """XTEA-style F-function: shift-XOR-add on 32-bit words.
+    Same core as TEA but key schedule differs (handled externally by Feistel).
+    """
+    words = bytes_to_words(data, 4, 'little')
+    result = []
+    for w in words:
+        shifted = (((w << 4) & 0xFFFFFFFF) ^ ((w >> 5) & 0xFFFFFFFF))
+        result.append((shifted + w) & 0xFFFFFFFF)
+    return words_to_bytes(result, 4, 'little')
+
+
+def sbox_simon_f(data: bytes) -> bytes:
+    """SIMON F-function: (ROL1(x) AND ROL8(x)) XOR ROL2(x) on 32-bit words."""
+    words = bytes_to_words(data, 4, 'little')
+    result = []
+    for x in words:
+        r1 = rotate_left(x, 1, 32)
+        r8 = rotate_left(x, 8, 32)
+        r2 = rotate_left(x, 2, 32)
+        result.append((r1 & r8) ^ r2)
+    return words_to_bytes(result, 4, 'little')
+
+
+def _hight_f0(x: int) -> int:
+    """HIGHT F0: ROL1(x) XOR ROL2(x) XOR ROL7(x) on 8-bit."""
+    return rotate_left(x, 1, 8) ^ rotate_left(x, 2, 8) ^ rotate_left(x, 7, 8)
+
+
+def _hight_f1(x: int) -> int:
+    """HIGHT F1: ROL3(x) XOR ROL4(x) XOR ROL6(x) on 8-bit."""
+    return rotate_left(x, 3, 8) ^ rotate_left(x, 4, 8) ^ rotate_left(x, 6, 8)
+
+
+def sbox_hight_f(data: bytes) -> bytes:
+    """HIGHT-style F-function alternating F0/F1 on each byte."""
+    result = bytearray(len(data))
+    for i, b in enumerate(data):
+        result[i] = _hight_f0(b) if i % 2 == 0 else _hight_f1(b)
+    return bytes(result)
+
+
+# ============================================================================
 # COMPONENT REGISTRY
 # ============================================================================
 
@@ -833,6 +1110,76 @@ def builtin_components() -> Dict[str, Component]:
         compatible_arch={"ARX"},
         forward=arx_mul_mod16,
         inverse=arx_mul_mod16_inv,
+    )
+
+    # ========== PRESENT COMPONENTS ==========
+    comps["sbox.present"] = Component(
+        component_id="sbox.present",
+        kind="SBOX",
+        description="PRESENT 4-bit S-box (ISO/IEC 29192-2)",
+        compatible_arch={"SPN"},
+        forward=sbox_present,
+        inverse=sboxinv_present,
+    )
+    comps["perm.present"] = Component(
+        component_id="perm.present",
+        kind="PERM",
+        description="PRESENT 64-bit bit permutation P(i)=(16i) mod 63",
+        compatible_arch={"SPN"},
+        forward=perm_present,
+        inverse=perm_present_inv,
+    )
+
+    # ========== GIFT COMPONENTS ==========
+    comps["sbox.gift"] = Component(
+        component_id="sbox.gift",
+        kind="SBOX",
+        description="GIFT 4-bit S-box (GIFT-128 specification)",
+        compatible_arch={"SPN"},
+        forward=sbox_gift,
+        inverse=sboxinv_gift,
+    )
+    comps["perm.gift"] = Component(
+        component_id="perm.gift",
+        kind="PERM",
+        description="GIFT-128 bit permutation (128-bit)",
+        compatible_arch={"SPN"},
+        forward=perm_gift,
+        inverse=perm_gift_inv,
+    )
+
+    # ========== FEISTEL F-FUNCTIONS ==========
+    comps["sbox.tea_f"] = Component(
+        component_id="sbox.tea_f",
+        kind="SBOX",
+        description="TEA shift-add-XOR F-function (32-bit words)",
+        compatible_arch={"FEISTEL"},
+        forward=sbox_tea_f,
+        inverse=sbox_tea_f,
+    )
+    comps["sbox.xtea_f"] = Component(
+        component_id="sbox.xtea_f",
+        kind="SBOX",
+        description="XTEA shift-XOR-add F-function (32-bit words)",
+        compatible_arch={"FEISTEL"},
+        forward=sbox_xtea_f,
+        inverse=sbox_xtea_f,
+    )
+    comps["sbox.simon_f"] = Component(
+        component_id="sbox.simon_f",
+        kind="SBOX",
+        description="SIMON AND-rotate-XOR F-function (32-bit words)",
+        compatible_arch={"FEISTEL"},
+        forward=sbox_simon_f,
+        inverse=sbox_simon_f,
+    )
+    comps["sbox.hight_f"] = Component(
+        component_id="sbox.hight_f",
+        kind="SBOX",
+        description="HIGHT F0/F1 rotation-XOR F-function (8-bit)",
+        compatible_arch={"FEISTEL"},
+        forward=sbox_hight_f,
+        inverse=sbox_hight_f,
     )
 
     return comps

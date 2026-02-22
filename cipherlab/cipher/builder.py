@@ -178,9 +178,6 @@ def build_cipher(spec: CipherSpec, registry: Optional[ComponentRegistry] = None)
     ks = reg.get(ks_id).forward
 
     if spec.architecture == "SPN":
-        # Recommended: 128-bit block to match AES-like components
-        if spec.block_size_bits != 128:
-            raise ValueError("SPN template currently supports block_size_bits=128 only")
         sbox_id = spec.components.get("sbox", "sbox.aes")
         perm_id = spec.components.get("perm", "perm.aes_shiftrows")
         lin_id = spec.components.get("linear", "linear.aes_mixcolumns")

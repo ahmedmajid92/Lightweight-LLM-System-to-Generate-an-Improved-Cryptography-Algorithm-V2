@@ -11,6 +11,7 @@ from cipherlab.cipher.registry import ComponentRegistry
 from cipherlab.cipher.spec import CipherSpec
 from cipherlab.cipher.validator import validate_spec
 from cipherlab.cipher.exporter import export_cipher_module
+from cipherlab.context_logger import build_context_snapshot
 from cipherlab.rag.retriever import RAGRetriever
 from cipherlab.utils.repro import make_run_dir, write_json, write_text
 from cipherlab.llm.assistant import suggest_improvements
@@ -269,6 +270,19 @@ if new_spec and new_metrics:
 # ---------- RAG chat ----------
 st.subheader("5) KB Chat (lightweight block ciphers)")
 
+# Build context snapshot for the current cipher design
+ctx_snapshot = build_context_snapshot(spec, registry, metrics, issues)
+cipher_context = ctx_snapshot.to_prompt_context()
+
+# Initialize chat history
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+
+# Display existing chat history
+for msg in st.session_state["chat_history"]:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
 question = st.text_input("Ask a question about lightweight block ciphers / components / tests", value="")
 if st.button("Ask", disabled=(not question.strip() or not settings.openai_api_key)):
     try:
@@ -280,13 +294,40 @@ if st.button("Ask", disabled=(not question.strip() or not settings.openai_api_ke
     chunks = retriever.retrieve(question)
     rag_context = retriever.format_for_prompt(chunks)
 
-    system = "You are a lightweight block-cipher research assistant focused on IoT and resource-constrained cryptography. Use the provided KB snippets. If KB is insufficient, say so."
-    user = f"Question: {question}\n\nKB snippets:\n{rag_context}\n\nAnswer clearly and concisely."
+    # Context-aware system prompt
+    system = (
+        "You are a lightweight block-cipher research assistant focused on IoT and "
+        "resource-constrained cryptography. Use the provided KB snippets. If KB is insufficient, say so.\n\n"
+        "Current design context:\n" + cipher_context
+    )
+
+    # Include recent conversation history (last 6 messages)
+    history = st.session_state["chat_history"][-6:]
+    history_text = ""
+    if history:
+        history_text = "\n\nConversation history:\n"
+        for msg in history:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            history_text += f"{role}: {msg['content'][:300]}\n"
+
+    user = f"Question: {question}\n\nKB snippets:\n{rag_context}{history_text}\n\nAnswer clearly and concisely."
     provider = OpenAIProvider(api_key=settings.openai_api_key)
     resp = provider.generate_text(model=model_fast, system=system, user=user, temperature=0.2, max_output_tokens=900)
-    st.write(resp.text)
+
+    # Store in chat history
+    st.session_state["chat_history"].append({"role": "user", "content": question})
+    st.session_state["chat_history"].append({"role": "assistant", "content": resp.text})
+
+    with st.chat_message("user"):
+        st.markdown(question)
+    with st.chat_message("assistant"):
+        st.write(resp.text)
 
     with st.expander("Retrieved KB chunks"):
         for c in chunks:
             st.markdown(f"**{c.title}** — {c.heading} (`{c.source_path}`)\n\nScore: {c.score:.4f}")
             st.code(c.text[:1200])
+
+if st.button("Clear chat history"):
+    st.session_state["chat_history"] = []
+    st.rerun()

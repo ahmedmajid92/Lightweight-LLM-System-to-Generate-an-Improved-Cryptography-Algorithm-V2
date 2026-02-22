@@ -1,10 +1,12 @@
-"""AlgorithmsBlock.py (v3, PhD Thesis Edition)
+"""AlgorithmsBlock.py (v3, PhD Thesis Edition — Phase 2)
 
 This module provides:
 - A structured CipherSpec for block cipher specifications
 - SPN, Feistel, and ARX cipher templates built from Components.py registry
-- All 12 reference block cipher algorithms (AES, DES, 3DES, Blowfish, Twofish,
-  Serpent, Camellia, CAST-128, IDEA, SEED, RC5, RC6)
+- All 12 Lightweight Cryptography (LWC) reference algorithms:
+  SPN: AES, PRESENT, GIFT
+  Feistel: DES, Blowfish, HIGHT, TEA, XTEA, SIMON
+  ARX: SPECK, RC5, LEA
 - Simple local metrics (avalanche tests)
 - Export of standalone Python modules
 
@@ -47,9 +49,10 @@ class CipherSpec:
     key_size_bits: int
     rounds: int
     components: Dict[str, str] = field(default_factory=dict)
-    version: str = "0.2"
+    version: str = "0.3"
     notes: str = ""
     seed: int = 1337
+    word_size: int = 32  # bits per word (8, 16, 32, or 64)
 
     def to_json(self) -> str:
         """Serialize specification to JSON."""
@@ -92,9 +95,6 @@ class SPNCipher(BlockCipher):
             raise ValueError(f"Plaintext must be {bs} bytes, got {len(pt)}")
         if len(key) * 8 != self.spec.key_size_bits:
             raise ValueError(f"Key must be {self.spec.key_size_bits//8} bytes")
-        if bs != 16:
-            raise ValueError("SPN template currently supports 128-bit blocks only")
-
         # Get components
         ks_id = self.spec.components.get("key_schedule", "ks.sha256_kdf")
         sbox_id = self.spec.components.get("sbox", "sbox.aes")
@@ -105,7 +105,7 @@ class SPNCipher(BlockCipher):
         sbox = self.reg.get(sbox_id)
         perm = self.reg.get(perm_id)
         lin = self.reg.get(lin_id)
-        
+
         if not (sbox.inverse and perm.inverse and lin.inverse):
             raise ValueError("SPN requires invertible components")
 
@@ -132,8 +132,6 @@ class SPNCipher(BlockCipher):
             raise ValueError(f"Ciphertext must be {bs} bytes")
         if len(key) * 8 != self.spec.key_size_bits:
             raise ValueError(f"Key must be {self.spec.key_size_bits//8} bytes")
-        if bs != 16:
-            raise ValueError("SPN template currently supports 128-bit blocks only")
 
         # Get components
         ks_id = self.spec.components.get("key_schedule", "ks.sha256_kdf")
@@ -448,6 +446,7 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
         "block_size_bits": 128,
         "key_size_bits": 128,
         "rounds": 10,
+        "word_size": 32,
         "components": {
             "sbox": "sbox.aes",
             "perm": "perm.aes_shiftrows",
@@ -458,39 +457,42 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
     },
     "PRESENT": {
         "architecture": "SPN",
-        "block_size_bits": 128,  # Real PRESENT uses 64-bit blocks; 128 here for SPN builder compat
+        "block_size_bits": 64,
         "key_size_bits": 128,
         "rounds": 31,
+        "word_size": 16,
         "components": {
-            "sbox": "sbox.aes",        # placeholder — real PRESENT uses a 4-bit S-box
-            "perm": "perm.identity",    # placeholder — real PRESENT uses a 64-bit bit permutation
+            "sbox": "sbox.present",
+            "perm": "perm.present",
             "linear": "linear.identity",
             "key_schedule": "ks.sha256_kdf"
         },
-        "notes": "PRESENT (ISO/IEC 29192-2) LWC standard. Real PRESENT: 64-bit blocks, 4-bit S-box. "
-                 "Set to 128-bit here for SPN builder compatibility. Phase 2 will add native 64-bit SPN.",
+        "notes": "PRESENT (ISO/IEC 29192-2) LWC standard. 64-bit blocks, 4-bit S-box, "
+                 "bit permutation P(i)=(16i) mod 63. ~1570 GE.",
     },
     "GIFT": {
         "architecture": "SPN",
         "block_size_bits": 128,
         "key_size_bits": 128,
         "rounds": 40,
+        "word_size": 32,
         "components": {
-            "sbox": "sbox.aes",        # placeholder — real GIFT uses a 4-bit S-box
-            "perm": "perm.identity",    # placeholder — real GIFT uses a bit permutation
+            "sbox": "sbox.gift",
+            "perm": "perm.gift",
             "linear": "linear.identity",
             "key_schedule": "ks.sha256_kdf"
         },
-        "notes": "GIFT-128 lightweight SPN cipher. Improved PRESENT design with efficient bit permutation. "
-                 "Placeholder components — dedicated GIFT S-box/perm to be added in Phase 2.",
+        "notes": "GIFT-128 lightweight SPN cipher. Improved PRESENT design with 4-bit S-box and "
+                 "128-bit bit permutation. NIST LWC finalist basis (GIFT-COFB).",
     },
 
     # ========== FEISTEL ALGORITHMS ==========
     "DES": {
         "architecture": "FEISTEL",
         "block_size_bits": 64,
-        "key_size_bits": 128,  # Extended for this framework (original: 56)
+        "key_size_bits": 128,
         "rounds": 16,
+        "word_size": 32,
         "components": {
             "f_sbox": "sbox.des",
             "f_perm": "perm.identity",
@@ -503,6 +505,7 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
         "block_size_bits": 64,
         "key_size_bits": 128,
         "rounds": 16,
+        "word_size": 32,
         "components": {
             "f_sbox": "sbox.blowfish",
             "f_perm": "perm.identity",
@@ -515,52 +518,56 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
         "block_size_bits": 64,
         "key_size_bits": 128,
         "rounds": 32,
+        "word_size": 8,
         "components": {
-            "f_sbox": "sbox.aes",      # placeholder — real HIGHT uses addition/rotation in F
+            "f_sbox": "sbox.hight_f",
             "f_perm": "perm.identity",
             "key_schedule": "ks.sha256_kdf"
         },
         "notes": "HIGHT (ISO/IEC 18033-4) lightweight cipher for RFID/IoT. Generalized Feistel with "
-                 "ARX-style F-function. Placeholder components — dedicated HIGHT F-function in Phase 2.",
+                 "F0/F1 rotation-XOR functions on 8-bit bytes.",
     },
     "TEA": {
         "architecture": "FEISTEL",
         "block_size_bits": 64,
         "key_size_bits": 128,
         "rounds": 64,
+        "word_size": 32,
         "components": {
-            "f_sbox": "sbox.identity",  # TEA uses no S-box, pure ARX F-function
+            "f_sbox": "sbox.tea_f",
             "f_perm": "perm.identity",
             "key_schedule": "ks.sha256_kdf"
         },
         "notes": "Tiny Encryption Algorithm. Minimal gate count Feistel cipher with 64 rounds (32 cycles). "
-                 "Uses delta constant 0x9E3779B9. Placeholder — dedicated TEA F-function in Phase 2.",
+                 "F(x) = ((x<<4) ^ (x>>5)) + x on 32-bit words.",
     },
     "XTEA": {
         "architecture": "FEISTEL",
         "block_size_bits": 64,
         "key_size_bits": 128,
         "rounds": 64,
+        "word_size": 32,
         "components": {
-            "f_sbox": "sbox.identity",  # XTEA uses no S-box, pure ARX F-function
+            "f_sbox": "sbox.xtea_f",
             "f_perm": "perm.identity",
             "key_schedule": "ks.sha256_kdf"
         },
         "notes": "Extended TEA. Improved key schedule over TEA to resist related-key attacks. "
-                 "64 rounds (32 cycles). Placeholder — dedicated XTEA F-function in Phase 2.",
+                 "64 rounds (32 cycles). Same F-function as TEA.",
     },
     "SIMON": {
         "architecture": "FEISTEL",
         "block_size_bits": 64,
         "key_size_bits": 128,
         "rounds": 42,
+        "word_size": 32,
         "components": {
-            "f_sbox": "sbox.identity",  # SIMON uses AND-rotate-XOR, no S-box
+            "f_sbox": "sbox.simon_f",
             "f_perm": "perm.identity",
             "key_schedule": "ks.sha256_kdf"
         },
-        "notes": "SIMON 64/128 (NSA LWC family). AND-rotate-XOR Feistel structure optimized for "
-                 "hardware. Placeholder — dedicated SIMON F-function in Phase 2.",
+        "notes": "SIMON 64/128 (NSA LWC family). F(x) = (ROL1(x) AND ROL8(x)) XOR ROL2(x). "
+                 "Hardware-optimized AND-rotate-XOR Feistel structure.",
     },
 
     # ========== ARX ALGORITHMS ==========
@@ -569,6 +576,7 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
         "block_size_bits": 64,
         "key_size_bits": 128,
         "rounds": 27,
+        "word_size": 32,
         "components": {
             "arx_add": "arx.add_mod32",
             "arx_rotate": "arx.rotate_left_3",
@@ -581,6 +589,7 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
         "block_size_bits": 64,
         "key_size_bits": 128,
         "rounds": 12,
+        "word_size": 32,
         "components": {
             "arx_add": "arx.add_mod32",
             "arx_rotate": "arx.rotate_left_3",
@@ -593,6 +602,7 @@ ALGORITHM_LIBRARY: Dict[str, Dict[str, object]] = {
         "block_size_bits": 128,
         "key_size_bits": 128,
         "rounds": 24,
+        "word_size": 32,
         "components": {
             "arx_add": "arx.add_mod32",
             "arx_rotate": "arx.rotate_left_5",
@@ -628,6 +638,7 @@ def get_template(name: str, *, override_name: Optional[str] = None, seed: int = 
         components=dict(t["components"]),
         notes=str(t.get("notes", "")),
         seed=int(seed),
+        word_size=int(t.get("word_size", 32)),
     )
 
 

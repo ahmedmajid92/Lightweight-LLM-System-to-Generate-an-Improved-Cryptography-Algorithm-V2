@@ -10,8 +10,16 @@ def export_cipher_module(spec: CipherSpec) -> str:
 
     # Decide what code pieces to include
     uses_aes_sbox = any(v == "sbox.aes" for v in spec.components.values())
+    uses_present_sbox = any(v == "sbox.present" for v in spec.components.values())
+    uses_gift_sbox = any(v == "sbox.gift" for v in spec.components.values())
     uses_shiftrows = any(v == "perm.aes_shiftrows" for v in spec.components.values())
+    uses_present_perm = any(v == "perm.present" for v in spec.components.values())
+    uses_gift_perm = any(v == "perm.gift" for v in spec.components.values())
     uses_mixcolumns = any(v == "linear.aes_mixcolumns" for v in spec.components.values())
+    uses_tea_f = any(v == "sbox.tea_f" for v in spec.components.values())
+    uses_xtea_f = any(v == "sbox.xtea_f" for v in spec.components.values())
+    uses_simon_f = any(v == "sbox.simon_f" for v in spec.components.values())
+    uses_hight_f = any(v == "sbox.hight_f" for v in spec.components.values())
 
     header = f'''"""Generated block cipher (research prototype)
 
@@ -31,6 +39,7 @@ WARNING:
     util = """from __future__ import annotations
 
 import hashlib
+import struct
 from dataclasses import dataclass
 from typing import List
 
@@ -38,6 +47,28 @@ def xor_bytes(a: bytes, b: bytes) -> bytes:
     if len(a) != len(b):
         raise ValueError("xor_bytes length mismatch")
     return bytes(x ^ y for x, y in zip(a, b))
+
+def rotate_left(x: int, r: int, w: int) -> int:
+    mask = (1 << w) - 1
+    r &= (w - 1)
+    x &= mask
+    return ((x << r) & mask) | (x >> (w - r))
+
+def rotate_right(x: int, r: int, w: int) -> int:
+    mask = (1 << w) - 1
+    r &= (w - 1)
+    x &= mask
+    return (x >> r) | ((x << (w - r)) & mask)
+
+def bytes_to_words(data: bytes, word_size: int = 4, byteorder: str = 'little') -> List[int]:
+    fmt = '<' if byteorder == 'little' else '>'
+    fmt += {2: 'H', 4: 'I', 8: 'Q'}[word_size] * (len(data) // word_size)
+    return list(struct.unpack(fmt, data))
+
+def words_to_bytes(words: List[int], word_size: int = 4, byteorder: str = 'little') -> bytes:
+    fmt = '<' if byteorder == 'little' else '>'
+    fmt += {2: 'H', 4: 'I', 8: 'Q'}[word_size] * len(words)
+    return struct.pack(fmt, *words)
 
 def _sha256(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()
@@ -59,9 +90,10 @@ def ks_sha256_kdf(key: bytes, *, rounds: int, out_len: int, seed: int = 0) -> Li
     return keys
 """
 
+    # ---- S-box code ----
     sbox_code = ""
     if uses_aes_sbox:
-        sbox_code = """AES_SBOX = [
+        sbox_code += """AES_SBOX = [
     0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
     0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
     0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
@@ -90,9 +122,103 @@ def sboxinv_aes(data: bytes) -> bytes:
     return bytes(AES_INV_SBOX[b] for b in data)
 """
 
+    if uses_present_sbox:
+        sbox_code += """PRESENT_SBOX = [0xC, 0x5, 0x6, 0xB, 0x9, 0x0, 0xA, 0xD,
+                0x3, 0xE, 0xF, 0x8, 0x4, 0x7, 0x1, 0x2]
+PRESENT_INV_SBOX = [0] * 16
+for i, v in enumerate(PRESENT_SBOX):
+    PRESENT_INV_SBOX[v] = i
+
+def sbox_present(data: bytes) -> bytes:
+    result = bytearray(len(data))
+    for i, byte in enumerate(data):
+        lo = PRESENT_SBOX[byte & 0x0F]
+        hi = PRESENT_SBOX[(byte >> 4) & 0x0F]
+        result[i] = (hi << 4) | lo
+    return bytes(result)
+
+def sboxinv_present(data: bytes) -> bytes:
+    result = bytearray(len(data))
+    for i, byte in enumerate(data):
+        lo = PRESENT_INV_SBOX[byte & 0x0F]
+        hi = PRESENT_INV_SBOX[(byte >> 4) & 0x0F]
+        result[i] = (hi << 4) | lo
+    return bytes(result)
+"""
+
+    if uses_gift_sbox:
+        sbox_code += """GIFT_SBOX = [0x1, 0xA, 0x4, 0xC, 0x6, 0xF, 0x3, 0x9,
+             0x2, 0xD, 0xB, 0x7, 0x5, 0x0, 0x8, 0xE]
+GIFT_INV_SBOX = [0] * 16
+for i, v in enumerate(GIFT_SBOX):
+    GIFT_INV_SBOX[v] = i
+
+def sbox_gift(data: bytes) -> bytes:
+    result = bytearray(len(data))
+    for i, byte in enumerate(data):
+        lo = GIFT_SBOX[byte & 0x0F]
+        hi = GIFT_SBOX[(byte >> 4) & 0x0F]
+        result[i] = (hi << 4) | lo
+    return bytes(result)
+
+def sboxinv_gift(data: bytes) -> bytes:
+    result = bytearray(len(data))
+    for i, byte in enumerate(data):
+        lo = GIFT_INV_SBOX[byte & 0x0F]
+        hi = GIFT_INV_SBOX[(byte >> 4) & 0x0F]
+        result[i] = (hi << 4) | lo
+    return bytes(result)
+"""
+
+    # ---- Feistel F-function code ----
+    feistel_f_code = ""
+    if uses_tea_f:
+        feistel_f_code += """def sbox_tea_f(data: bytes) -> bytes:
+    words = bytes_to_words(data, 4, 'little')
+    result = []
+    for w in words:
+        shifted = (((w << 4) & 0xFFFFFFFF) ^ ((w >> 5) & 0xFFFFFFFF))
+        result.append((shifted + w) & 0xFFFFFFFF)
+    return words_to_bytes(result, 4, 'little')
+"""
+    if uses_xtea_f:
+        feistel_f_code += """def sbox_xtea_f(data: bytes) -> bytes:
+    words = bytes_to_words(data, 4, 'little')
+    result = []
+    for w in words:
+        shifted = (((w << 4) & 0xFFFFFFFF) ^ ((w >> 5) & 0xFFFFFFFF))
+        result.append((shifted + w) & 0xFFFFFFFF)
+    return words_to_bytes(result, 4, 'little')
+"""
+    if uses_simon_f:
+        feistel_f_code += """def sbox_simon_f(data: bytes) -> bytes:
+    words = bytes_to_words(data, 4, 'little')
+    result = []
+    for x in words:
+        r1 = rotate_left(x, 1, 32)
+        r8 = rotate_left(x, 8, 32)
+        r2 = rotate_left(x, 2, 32)
+        result.append((r1 & r8) ^ r2)
+    return words_to_bytes(result, 4, 'little')
+"""
+    if uses_hight_f:
+        feistel_f_code += """def _hight_f0(x: int) -> int:
+    return rotate_left(x, 1, 8) ^ rotate_left(x, 2, 8) ^ rotate_left(x, 7, 8)
+
+def _hight_f1(x: int) -> int:
+    return rotate_left(x, 3, 8) ^ rotate_left(x, 4, 8) ^ rotate_left(x, 6, 8)
+
+def sbox_hight_f(data: bytes) -> bytes:
+    result = bytearray(len(data))
+    for i, b in enumerate(data):
+        result[i] = _hight_f0(b) if i % 2 == 0 else _hight_f1(b)
+    return bytes(result)
+"""
+
+    # ---- Permutation code ----
     perm_code = ""
     if uses_shiftrows:
-        perm_code = """# AES ShiftRows in column-major layout (index = col*4 + row)
+        perm_code += """# AES ShiftRows in column-major layout (index = col*4 + row)
 _AES_SHIFTROWS_MAP = []
 _AES_INV_SHIFTROWS_MAP = []
 for col in range(4):
@@ -115,6 +241,72 @@ def perm_aes_inv_shiftrows(data: bytes) -> bytes:
     return bytes(data[i] for i in _AES_INV_SHIFTROWS_MAP)
 """
 
+    if uses_present_perm:
+        perm_code += """PRESENT_PERM = [0] * 64
+for _i in range(64):
+    PRESENT_PERM[_i] = (_i * 16) % 63 if _i < 63 else 63
+PRESENT_INV_PERM = [0] * 64
+for _i in range(64):
+    PRESENT_INV_PERM[PRESENT_PERM[_i]] = _i
+
+def perm_present(data: bytes) -> bytes:
+    if len(data) != 8:
+        raise ValueError("perm_present requires 8-byte (64-bit) input")
+    val = int.from_bytes(data, 'big')
+    out = 0
+    for i in range(64):
+        if val & (1 << (63 - i)):
+            out |= (1 << (63 - PRESENT_PERM[i]))
+    return out.to_bytes(8, 'big')
+
+def perm_present_inv(data: bytes) -> bytes:
+    if len(data) != 8:
+        raise ValueError("perm_present_inv requires 8-byte (64-bit) input")
+    val = int.from_bytes(data, 'big')
+    out = 0
+    for i in range(64):
+        if val & (1 << (63 - i)):
+            out |= (1 << (63 - PRESENT_INV_PERM[i]))
+    return out.to_bytes(8, 'big')
+"""
+
+    if uses_gift_perm:
+        perm_code += """GIFT_PERM_128 = [
+     0,  33,  66,  99,   2,  35,  68, 101,   4,  37,  70, 103,   6,  39,  72, 105,
+     8,  41,  74, 107,  10,  43,  76, 109,  12,  45,  78, 111,  14,  47,  80, 113,
+    16,  49,  82, 115,  18,  51,  84, 117,  20,  53,  86, 119,  22,  55,  88, 121,
+    24,  57,  90, 123,  26,  59,  92, 125,  28,  61,  94, 127,  30,  63,  64,  97,
+    32,   1,  98,  67,  34,   3, 100,  69,  36,   5, 102,  71,  38,   7, 104,  73,
+    40,   9, 106,  75,  42,  11, 108,  77,  44,  13, 110,  79,  46,  15, 112,  81,
+    48,  17, 114,  83,  50,  19, 116,  85,  52,  21, 118,  87,  54,  23, 120,  89,
+    56,  25, 122,  91,  58,  27, 124,  93,  60,  29, 126,  95,  62,  31,  96,  65,
+]
+GIFT_INV_PERM_128 = [0] * 128
+for _i, _v in enumerate(GIFT_PERM_128):
+    GIFT_INV_PERM_128[_v] = _i
+
+def perm_gift(data: bytes) -> bytes:
+    if len(data) != 16:
+        raise ValueError("perm_gift requires 16-byte (128-bit) input")
+    val = int.from_bytes(data, 'big')
+    out = 0
+    for i in range(128):
+        if val & (1 << (127 - i)):
+            out |= (1 << (127 - GIFT_PERM_128[i]))
+    return out.to_bytes(16, 'big')
+
+def perm_gift_inv(data: bytes) -> bytes:
+    if len(data) != 16:
+        raise ValueError("perm_gift_inv requires 16-byte (128-bit) input")
+    val = int.from_bytes(data, 'big')
+    out = 0
+    for i in range(128):
+        if val & (1 << (127 - i)):
+            out |= (1 << (127 - GIFT_INV_PERM_128[i]))
+    return out.to_bytes(16, 'big')
+"""
+
+    # ---- Linear layer code ----
     linear_code = ""
     if uses_mixcolumns:
         linear_code = """def _mul(a: int, b: int) -> int:
@@ -158,15 +350,40 @@ def linear_aes_inv_mixcolumns(data: bytes) -> bytes:
     return bytes(out)
 """
 
-    # Architecture code
+    # ---- Architecture-specific cipher class ----
+    def _resolve_sbox(comp_id):
+        """Map component ID to function name in exported module."""
+        mapping = {
+            "sbox.aes": ("sbox_aes", "sboxinv_aes"),
+            "sbox.present": ("sbox_present", "sboxinv_present"),
+            "sbox.gift": ("sbox_gift", "sboxinv_gift"),
+            "sbox.tea_f": ("sbox_tea_f", "sbox_tea_f"),
+            "sbox.xtea_f": ("sbox_xtea_f", "sbox_xtea_f"),
+            "sbox.simon_f": ("sbox_simon_f", "sbox_simon_f"),
+            "sbox.hight_f": ("sbox_hight_f", "sbox_hight_f"),
+        }
+        return mapping.get(comp_id, ("(lambda x: x)", "(lambda x: x)"))
+
+    def _resolve_perm(comp_id):
+        mapping = {
+            "perm.aes_shiftrows": ("perm_aes_shiftrows", "perm_aes_inv_shiftrows"),
+            "perm.present": ("perm_present", "perm_present_inv"),
+            "perm.gift": ("perm_gift", "perm_gift_inv"),
+            "perm.identity": ("(lambda x: x)", "(lambda x: x)"),
+        }
+        return mapping.get(comp_id, ("(lambda x: x)", "(lambda x: x)"))
+
+    def _resolve_linear(comp_id):
+        mapping = {
+            "linear.aes_mixcolumns": ("linear_aes_mixcolumns", "linear_aes_inv_mixcolumns"),
+            "linear.identity": ("(lambda x: x)", "(lambda x: x)"),
+        }
+        return mapping.get(comp_id, ("(lambda x: x)", "(lambda x: x)"))
+
     if spec.architecture == "SPN":
-        # map component ids -> function names in module
-        sbox_f = "sbox_aes" if spec.components.get("sbox") == "sbox.aes" else "(lambda x: x)"
-        sbox_i = "sboxinv_aes" if spec.components.get("sbox") == "sbox.aes" else "(lambda x: x)"
-        perm_f = "perm_aes_shiftrows" if spec.components.get("perm") == "perm.aes_shiftrows" else "(lambda x: x)"
-        perm_i = "perm_aes_inv_shiftrows" if spec.components.get("perm") == "perm.aes_shiftrows" else "(lambda x: x)"
-        lin_f = "linear_aes_mixcolumns" if spec.components.get("linear") == "linear.aes_mixcolumns" else "(lambda x: x)"
-        lin_i = "linear_aes_inv_mixcolumns" if spec.components.get("linear") == "linear.aes_mixcolumns" else "(lambda x: x)"
+        sbox_f, sbox_i = _resolve_sbox(spec.components.get("sbox", "sbox.aes"))
+        perm_f, perm_i = _resolve_perm(spec.components.get("perm", "perm.aes_shiftrows"))
+        lin_f, lin_i = _resolve_linear(spec.components.get("linear", "linear.aes_mixcolumns"))
 
         arch_code = f"""@dataclass
 class Cipher:
@@ -218,8 +435,8 @@ def self_test() -> None:
     print(\"self_test OK\")
 """
     elif spec.architecture == "FEISTEL":
-        sbox_f = "sbox_aes" if spec.components.get("f_sbox") == "sbox.aes" else "(lambda x: x)"
-        perm_f = "perm_aes_shiftrows" if spec.components.get("f_perm") == "perm.aes_shiftrows" else "(lambda x: x)"  # normally identity
+        sbox_f, _ = _resolve_sbox(spec.components.get("f_sbox", "sbox.aes"))
+        perm_f, _ = _resolve_perm(spec.components.get("f_perm", "perm.identity"))
 
         arch_code = f"""@dataclass
 class Cipher:
@@ -271,7 +488,83 @@ def self_test() -> None:
         assert rt == pt, (pt.hex(), ct.hex(), rt.hex())
     print(\"self_test OK\")
 """
+    elif spec.architecture == "ARX":
+        arch_code = f"""@dataclass
+class Cipher:
+    rounds: int = {spec.rounds}
+    block_size_bytes: int = {spec.block_size_bits // 8}
+    key_size_bytes: int = {spec.key_size_bits // 8}
+    seed: int = {spec.seed}
+
+    def _arx_add(self, data: bytes) -> bytes:
+        words = bytes_to_words(data, 4, 'little')
+        result = []
+        for i in range(0, len(words), 2):
+            if i + 1 < len(words):
+                result.append((words[i] + words[i + 1]) & 0xFFFFFFFF)
+                result.append(words[i + 1])
+            else:
+                result.append(words[i])
+        return words_to_bytes(result, 4, 'little')
+
+    def _arx_sub(self, data: bytes) -> bytes:
+        words = bytes_to_words(data, 4, 'little')
+        result = []
+        for i in range(0, len(words), 2):
+            if i + 1 < len(words):
+                result.append((words[i] - words[i + 1]) & 0xFFFFFFFF)
+                result.append(words[i + 1])
+            else:
+                result.append(words[i])
+        return words_to_bytes(result, 4, 'little')
+
+    def _arx_rot_fwd(self, data: bytes) -> bytes:
+        words = bytes_to_words(data, 4, 'little')
+        return words_to_bytes([rotate_left(w, 3, 32) for w in words], 4, 'little')
+
+    def _arx_rot_inv(self, data: bytes) -> bytes:
+        words = bytes_to_words(data, 4, 'little')
+        return words_to_bytes([rotate_right(w, 3, 32) for w in words], 4, 'little')
+
+    def encrypt_block(self, pt: bytes, key: bytes) -> bytes:
+        if len(pt) != self.block_size_bytes:
+            raise ValueError(\"bad pt length\")
+        if len(key) != self.key_size_bytes:
+            raise ValueError(\"bad key length\")
+        rks = ks_sha256_kdf(key, rounds=self.rounds, out_len=self.block_size_bytes, seed=self.seed)
+        state = pt
+        for r in range(self.rounds):
+            state = xor_bytes(state, rks[r])
+            state = self._arx_add(state)
+            state = self._arx_rot_fwd(state)
+        state = xor_bytes(state, rks[self.rounds])
+        return state
+
+    def decrypt_block(self, ct: bytes, key: bytes) -> bytes:
+        if len(ct) != self.block_size_bytes:
+            raise ValueError(\"bad ct length\")
+        if len(key) != self.key_size_bytes:
+            raise ValueError(\"bad key length\")
+        rks = ks_sha256_kdf(key, rounds=self.rounds, out_len=self.block_size_bytes, seed=self.seed)
+        state = xor_bytes(ct, rks[self.rounds])
+        for r in reversed(range(self.rounds)):
+            state = self._arx_rot_inv(state)
+            state = self._arx_sub(state)
+            state = xor_bytes(state, rks[r])
+        return state
+
+def self_test() -> None:
+    import os
+    c = Cipher()
+    for _ in range(50):
+        key = os.urandom(c.key_size_bytes)
+        pt = os.urandom(c.block_size_bytes)
+        ct = c.encrypt_block(pt, key)
+        rt = c.decrypt_block(ct, key)
+        assert rt == pt, (pt.hex(), ct.hex(), rt.hex())
+    print(\"self_test OK\")
+"""
     else:
         raise ValueError(f"Unsupported architecture for exporter: {spec.architecture}")
 
-    return header + util + "\n" + sbox_code + "\n" + perm_code + "\n" + linear_code + "\n" + arch_code
+    return header + util + "\n" + sbox_code + "\n" + feistel_f_code + "\n" + perm_code + "\n" + linear_code + "\n" + arch_code

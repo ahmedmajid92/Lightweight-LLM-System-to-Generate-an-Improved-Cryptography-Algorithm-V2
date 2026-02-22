@@ -22,8 +22,8 @@ def validate_spec(spec: CipherSpec, registry: ComponentRegistry | None = None) -
         errs.append(f"Unknown key_schedule component: {ks_id}")
 
     if spec.architecture == "SPN":
-        if spec.block_size_bits != 128:
-            errs.append("SPN template currently supports block_size_bits=128 only")
+        if spec.block_size_bits not in (64, 128):
+            errs.append("SPN template supports block_size_bits of 64 or 128")
         for k in ["sbox", "perm", "linear"]:
             if k not in spec.components:
                 errs.append(f"Missing SPN component: {k}")
@@ -43,6 +43,18 @@ def validate_spec(spec: CipherSpec, registry: ComponentRegistry | None = None) -
                 cid = spec.components[k]
                 if not reg.exists(cid):
                     errs.append(f"Unknown component {k}: {cid}")
+
+    elif spec.architecture == "ARX":
+        if spec.block_size_bits % 8 != 0:
+            errs.append("ARX requires block_size_bits multiple of 8")
+        for k in ["arx_add", "arx_rotate"]:
+            if k not in spec.components:
+                errs.append(f"Missing ARX component: {k}")
+            else:
+                cid = spec.components[k]
+                if not reg.exists(cid):
+                    errs.append(f"Unknown component {k}: {cid}")
+
     else:
         errs.append(f"Unsupported architecture: {spec.architecture}")
 
