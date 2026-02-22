@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 Architecture = Literal["SPN", "FEISTEL", "ARX"]
@@ -53,6 +53,14 @@ class CipherSpec(BaseModel):
 
 class ImprovementPatch(BaseModel):
     """A small patch to apply to an existing CipherSpec."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_description_to_summary(cls, data: Any) -> Any:
+        """Some LLMs (e.g. DeepSeek) return 'description' instead of 'summary'."""
+        if isinstance(data, dict) and "summary" not in data and "description" in data:
+            data["summary"] = data.pop("description")
+        return data
 
     summary: str = Field(..., min_length=5, max_length=240)
     rationale: List[str] = Field(default_factory=list, description="Bullet reasons / design principles")

@@ -193,10 +193,18 @@ class OpenAIProvider:
         """
         client = self.openrouter_client if use_openrouter and self.openrouter_client else self.client
         schema_json = json.dumps(schema.model_json_schema(), indent=2)
+        required_fields = schema.model_json_schema().get("required", [])
+        field_hint = ""
+        if required_fields:
+            field_hint = (
+                "\n\nREQUIRED top-level JSON keys (use these EXACT names): "
+                + ", ".join(f'"{f}"' for f in required_fields)
+            )
         augmented_system = (
             system
             + "\n\nYou MUST respond with valid JSON matching this exact schema:\n"
             + schema_json
+            + field_hint
         )
         last_err: Optional[Exception] = None
         for _ in range(retries + 1):

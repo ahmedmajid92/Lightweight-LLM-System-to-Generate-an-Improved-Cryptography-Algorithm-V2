@@ -36,7 +36,6 @@ registry = ComponentRegistry()
 
 # ---------- Sidebar: OpenAI + OpenRouter + RAG settings ----------
 st.sidebar.header("OpenAI settings")
-api_key = st.sidebar.text_input("OPENAI_API_KEY", value=settings.openai_api_key or "", type="password")
 model_fast = st.sidebar.text_input("Fast model", value=settings.openai_model_fast)
 model_quality = st.sidebar.text_input("Quality model", value=settings.openai_model_quality)
 
@@ -62,7 +61,6 @@ rag_alpha = st.sidebar.slider("Hybrid alpha (dense weight)", min_value=0.0, max_
 st.sidebar.write("If you built embeddings index, queries will use dense+BM25 hybrid. If not, BM25 only.")
 
 # Patch settings object in-memory
-settings.openai_api_key = api_key or None
 settings.openai_model_fast = model_fast
 settings.openai_model_quality = model_quality
 settings.rag_top_k = rag_top_k

@@ -1,234 +1,34 @@
-# 🔐 Crypto Cipher Lab v2 (Lightweight Cryptography Edition)
+# Crypto Cipher Lab v2 (Lightweight Cryptography Edition)
 
 A **research and education** sandbox for experimenting with lightweight block cipher constructions for IoT and resource-constrained environments. This tool allows you to compose, analyze, and iterate on cipher designs using modular components and AI-powered suggestions (OpenAI + DeepSeek via OpenRouter).
 
-> ⚠️ **Important:** Nothing here is a proof of security. Do not use generated ciphers in production.
+> **Important:** Nothing here is a proof of security. Do not use generated ciphers in production.
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-| Feature                   | Description                                                      |
-| ------------------------- | ---------------------------------------------------------------- |
-| **Visual Cipher Builder** | Compose SPN, Feistel, or ARX ciphers from modular components     |
-| **Local Metrics**         | Run avalanche tests without any API cost                         |
-| **RAG-Powered KB**        | Query a cryptography knowledge base (BM25 + optional embeddings) |
-| **AI Improvements**       | Get structured improvement suggestions from DeepSeek/OpenAI      |
-| **Code Export**           | Download standalone Python modules with self-tests               |
-| **Fine-Tuned Model**      | Uses a custom fine-tuned model for cipher-specific responses     |
-
----
-
-## 🖥️ User Interface Guide
-
-The Streamlit application is organized into **5 main sections** plus a **sidebar** for configuration.
-
-### 📱 Sidebar: Settings Panel
-
-The sidebar contains three configuration sections:
-
-#### OpenAI Settings
-
-| Setting                   | Description                                                  |
-| ------------------------- | ------------------------------------------------------------ |
-| **OPENAI_API_KEY**        | Your OpenAI API key (required for KB Chat)                   |
-| **Fast model**            | Model used for quick responses (default: `gpt-4.1-mini`)     |
-| **Quality model**         | Model used for complex tasks (default: `gpt-4.1`)            |
-
-#### DeepSeek / OpenRouter Settings
-
-| Setting                            | Description                                                         |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| **DeepSeek model for improvements** | Choose DeepSeek-V3 (fast) or DeepSeek-R1 (reasoning)                |
-| **Fallback OpenAI model**           | Used when OPENROUTER_API_KEY is not configured                      |
-
-#### RAG Settings
-
-| Setting             | Description                                                                   |
-| ------------------- | ----------------------------------------------------------------------------- |
-| **Top-k KB chunks** | Number of knowledge base chunks to retrieve (2-12)                            |
-| **Hybrid alpha**    | Balance between dense embeddings and BM25 (0.0 = BM25 only, 1.0 = dense only) |
+| Feature                        | Description                                                                         |
+| ------------------------------ | ----------------------------------------------------------------------------------- |
+| **Visual Cipher Builder**      | Compose SPN, Feistel, or ARX ciphers from 27+ modular components                   |
+| **Deterministic Evaluation**   | Roundtrip verification, SAC analysis, S-box DDT/LAT profiling (no API cost)         |
+| **AI Feedback Synthesis**      | Autonomous improvement suggestions via DeepSeek-R1 or OpenAI                        |
+| **Adaptive Evolution**         | AST-based mismatch detection + sandboxed LLM component mutation                     |
+| **Empirical Benchmarking**     | Automated model comparison (GPT-5.2 vs DeepSeek-V3 vs DeepSeek-R1)                 |
+| **Thesis Data Generation**     | LaTeX tables + JSONL dataset export for publication                                 |
+| **RAG-Powered KB**             | Query a cryptography knowledge base (BM25 + optional embeddings)                    |
+| **Code Export**                | Download standalone Python cipher modules with self-tests                            |
+| **Fine-Tuned Model**           | Optional custom fine-tuned model for cipher-specific responses                       |
 
 ---
 
-### 📐 Section 1: Choose Architecture and Components
+## Quick Start (Step by Step)
 
-This is where you design your cipher by selecting its fundamental building blocks.
-
-#### Architecture Selection
-
-Choose from three cipher architectures:
-
-- **SPN (Substitution-Permutation Network)**: Used by AES, PRESENT, GIFT. Applies substitution, permutation, and linear mixing in each round.
-- **FEISTEL**: Used by DES, Blowfish, SIMON, TEA, XTEA, HIGHT. Splits the block in half and applies a round function.
-- **ARX (Add-Rotate-XOR)**: Used by SPECK, RC5, LEA. Uses only modular addition, rotation, and XOR.
-
-#### Left Column - Basic Parameters
-
-| Parameter       | Description                                                           |
-| --------------- | --------------------------------------------------------------------- |
-| **Cipher name** | A custom name for your cipher design (e.g., "MyCipherV2")             |
-| **Seed**        | Integer for reproducibility - same seed produces identical round keys |
-| **Rounds**      | Number of encryption rounds (more rounds = more security, slower)     |
-
-#### Right Column - Block and Key Size
-
-| Parameter             | Description                                     |
-| --------------------- | ----------------------------------------------- |
-| **Block size (bits)** | Size of data processed at once (64 or 128 bits) |
-| **Key size (bits)**   | Length of the encryption key (128 or 256 bits)  |
-
-#### Component Dropdowns
-
-Depending on the architecture, you select different components:
-
-**For SPN:**
-| Component | Purpose | Example Options |
-|-----------|---------|-----------------|
-| **S-box** | Non-linear substitution | `sbox.aes`, `sbox.identity` |
-| **Permutation** | Bit/byte reordering | `perm.aes_shiftrows`, `perm.identity` |
-| **Linear diffusion** | Spread bit changes | `linear.aes_mixcolumns`, `linear.identity` |
-| **Key schedule** | Generate round keys | `ks.sha256_kdf` |
-
-**For Feistel:**
-| Component | Purpose | Example Options |
-|-----------|---------|-----------------|
-| **F-function S-box** | Non-linear function | `sbox.aes`, `sbox.des`, `sbox.blowfish` |
-| **F-function permutation** | Round function mixing | `perm.identity` |
-| **Key schedule** | Generate round keys | `ks.sha256_kdf`, `ks.blowfish_style` |
-
-**For ARX:**
-| Component | Purpose | Example Options |
-|-----------|---------|-----------------|
-| **ARX addition** | Modular addition | `arx.add_mod32` |
-| **ARX rotation** | Bit rotation | `arx.rotate_left_3`, `arx.rotate_left_5` |
-| **Key schedule** | Generate round keys | `ks.sha256_kdf` |
-
-After configuration, validation status is displayed:
-
-- ✅ **Green**: "Spec looks valid" - ready to proceed
-- ❌ **Red**: Validation errors listed - fix before continuing
-
----
-
-### 📊 Section 2: Evaluate Locally (No API Cost)
-
-Click **"Run local metrics"** to analyze your cipher design without any API calls.
-
-#### Metrics Displayed
-
-| Metric            | Ideal Value | Meaning                                                                  |
-| ----------------- | ----------- | ------------------------------------------------------------------------ |
-| **pt_avalanche**  | ~0.50       | Plaintext avalanche: % of output bits that change when 1 input bit flips |
-| **key_avalanche** | ~0.50       | Key avalanche: % of output bits that change when 1 key bit flips         |
-| **overall_score** | 0-100       | Combined quality score based on all metrics                              |
-
-#### Detected Issues
-
-The right column shows heuristic-detected problems:
-
-- ⚠️ **Yellow warnings**: Issues like poor avalanche, weak diffusion
-- ✅ **Green success**: "No obvious issues flagged by heuristics"
-
-> **Note**: These are heuristic tests, NOT cryptanalysis. They cannot prove security.
-
----
-
-### 💾 Section 3: Export Cipher as Python Code
-
-Click **"Generate Python module"** to create a standalone implementation.
-
-#### What You Get
-
-A complete Python file containing:
-
-- The cipher class with `encrypt_block()` and `decrypt_block()` methods
-- All required components embedded (S-boxes, permutations, etc.)
-- A `self_test()` function for verification
-- Full documentation and usage examples
-
-#### Available Actions
-
-| Button                        | Action                                                 |
-| ----------------------------- | ------------------------------------------------------ |
-| **Download cipher_module.py** | Save the Python file to your computer                  |
-| **Save as reproducible run**  | Store the spec, code, and metrics in `runs/` directory |
-
----
-
-### 🤖 Section 4: Ask for Improvement Suggestions (Uses DeepSeek/OpenAI)
-
-This is the AI-powered feature that suggests how to improve your cipher.
-
-#### Prerequisites
-
-- ✅ Valid cipher specification
-- ✅ OpenAI API key configured (OpenRouter key recommended for improvements)
-- ✅ Local metrics have been run
-
-#### Process
-
-1. Click **"Suggest improvements"**
-2. System retrieves relevant knowledge from the KB
-3. DeepSeek (via OpenRouter) or OpenAI generates a structured `ImprovementPatch`
-
-#### The ImprovementPatch Contains
-
-| Field                  | Description                                       |
-| ---------------------- | ------------------------------------------------- |
-| **summary**            | Brief description of suggested changes            |
-| **rationale**          | List of reasons/design principles for the changes |
-| **new_rounds**         | Suggested number of rounds (if change needed)     |
-| **replace_components** | Component substitutions (e.g., swap S-box)        |
-| **add_notes**          | Additional design notes                           |
-
-#### Applying the Patch
-
-Click **"Apply patch and re-evaluate"** to:
-
-1. Create a new spec with suggested changes
-2. Run metrics on the improved design
-3. Compare before/after performance
-4. Download the improved cipher module
-
----
-
-### 💬 Section 5: KB Chat (Lightweight Block Ciphers)
-
-A conversational interface to query the cryptography knowledge base.
-
-#### How to Use
-
-1. Type a question in the text input (e.g., "What is the avalanche effect?")
-2. Click **"Ask"**
-3. The system retrieves relevant KB chunks and generates an answer
-
-#### Example Questions
-
-- "What makes a good S-box?"
-- "Explain the difference between SPN and Feistel"
-- "What is the birthday bound for 64-bit blocks?"
-- "How does key whitening improve security?"
-
-#### Retrieved KB Chunks
-
-Expand the **"Retrieved KB chunks"** section to see:
-
-- Source documents used to generate the answer
-- Relevance scores for each chunk
-- Original text excerpts
-
----
-
-## 🚀 Quick Start
-
-### 1. Install Dependencies
-
-**Using Conda (Recommended):**
+### Step 1: Clone and Install Dependencies
 
 ```bash
-conda env create -f environment.yml
-conda activate crypto-cipher-lab
+git clone <your-repo-url>
+cd My-New-Project
 ```
 
 **Using pip:**
@@ -237,93 +37,256 @@ conda activate crypto-cipher-lab
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
+**Using Conda (alternative):**
 
-Copy `.env.example` to `.env` and set:
-
-```env
-# Required
-OPENAI_API_KEY=sk-your-api-key-here
-
-# OpenRouter (DeepSeek for code-generation / reasoning)
-OPENROUTER_API_KEY=your_openrouter_key_here
-OPENROUTER_MODEL_FAST=deepseek/deepseek-chat-v3-0324
-OPENROUTER_MODEL_REASONING=deepseek/deepseek-r1
-
-# Optional (have sensible defaults)
-OPENAI_MODEL_FAST=gpt-4.1-mini
-OPENAI_MODEL_QUALITY=gpt-4.1
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-RAG_USE_EMBEDDINGS=false
-RAG_TOP_K=6
-RAG_HYBRID_ALPHA=0.55
-
-# Fine-tuned model (if available)
-FINETUNED_MODEL=ft:gpt-4.1-mini-2025-04-14:your-org:cipher-lab:xxxxx
+```bash
+conda env create -f environment.yml
+conda activate crypto-cipher-lab
 ```
 
-### 3. Build the KB Index
+### Step 2: Configure API Keys
+
+Copy the example environment file and add your API keys:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your keys:
+
+```env
+# Required - OpenAI API key
+OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# Optional - OpenRouter API key (for DeepSeek models)
+# Get one at https://openrouter.ai/keys
+OPENROUTER_API_KEY=your_openrouter_key_here
+```
+
+**Running with OpenAI only (no DeepSeek):**
+
+If you only have an OpenAI API key and no OpenRouter key, the system works perfectly fine. Simply leave the `OPENROUTER_API_KEY` blank or remove it:
+
+```env
+OPENAI_API_KEY=sk-your-openai-api-key-here
+# OPENROUTER_API_KEY=          <-- leave commented out or empty
+```
+
+When `OPENROUTER_API_KEY` is not set:
+- **Improvement suggestions** use `gpt-5.2` (via OpenAI Structured Outputs) instead of DeepSeek-R1
+- **Component mutation** uses `gpt-5.1-codex` (via OpenAI Responses API) instead of DeepSeek-R1
+- **All local evaluation** (roundtrip, SAC, S-box analysis) works without any API key
+- **KB Chat** requires only the OpenAI key
+
+The model names are configurable via environment variables:
+
+```env
+# Optional model overrides (these are the defaults)
+OPENAI_MODEL_FAST=gpt-4.1-mini
+OPENAI_MODEL_QUALITY=gpt-5.2
+OPENAI_MODEL_CODE=gpt-5.1-codex
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENROUTER_MODEL_FAST=deepseek/deepseek-chat-v3-0324
+OPENROUTER_MODEL_REASONING=deepseek/deepseek-r1
+```
+
+### Step 3: Build the Knowledge Base Index
 
 ```bash
 python scripts/build_kb_index.py
 ```
 
 This creates:
-
 - `kb_index/chunks.jsonl` - Chunked knowledge base
 - `kb_index/bm25.json` - BM25 search index
 - (optional) `kb_index/embeddings.npy` - Dense embeddings if `RAG_USE_EMBEDDINGS=true`
 
-### 4. Run the Application
+### Step 4: Run the Application
 
 ```bash
 streamlit run app/streamlit_app.py
 ```
 
-The app opens in your browser at `http://localhost:8501`
+The app opens in your browser at `http://localhost:8501`.
+
+### Step 5: Use the Application
+
+1. **Choose an architecture** (SPN, Feistel, or ARX) and select components
+2. **Run local metrics** to evaluate avalanche properties (free, no API)
+3. **Run advanced evaluation** for roundtrip verification, SAC analysis, and S-box profiling
+4. **Ask for AI improvements** (requires API key) to get structured suggestions
+5. **Apply patches** and compare before/after metrics
+6. **Export** the cipher as a standalone Python module
+7. **Chat with the KB** to learn about lightweight cryptography
 
 ---
 
-## 📁 Project Structure
+## Running the Benchmarks (Phase 5)
+
+The benchmark runner compares LLM model performance at cipher improvement:
+
+```bash
+# Quick test: 1 algorithm, 1 repetition, 2 iterations
+python scripts/run_benchmarks.py --algorithms AES --reps 1 --max-iterations 2
+
+# Full suite: all 12 algorithms x 3 models x 3 repetitions
+python scripts/run_benchmarks.py
+
+# Subset of algorithms
+python scripts/run_benchmarks.py --algorithms AES SPECK DES PRESENT
+
+# Regenerate LaTeX tables from existing results
+python scripts/run_benchmarks.py --latex-only benchmarks/2026-02-22T.../results.json
+```
+
+**Output:** The benchmark creates a timestamped directory under `benchmarks/` containing:
+
+```
+benchmarks/2026-02-22T14-30-00Z/
+  results.json              # Full experiment data
+  tables/
+    model_comparison.tex    # Table 1: Model vs model
+    architecture_comparison.tex
+    algorithm_detail.tex
+    convergence_AES.tex     # Per-algorithm convergence curves
+    token_cost.tex
+  dataset.jsonl             # Compact JSONL (1 line per experiment)
+  dataset_full.jsonl        # Detailed JSONL (includes iteration history)
+```
+
+**Requirements:** Both `OPENAI_API_KEY` and `OPENROUTER_API_KEY` are needed for the full 3-model comparison. Without OpenRouter, only the OpenAI model experiments will succeed (DeepSeek experiments will record errors and the suite will continue).
+
+---
+
+## Fine-Tuning (Optional)
+
+The repository includes tools to create and fine-tune a custom OpenAI model on cipher-specific data.
+
+### When to Re-Fine-Tune
+
+Re-fine-tuning is **required** if you:
+- Add new algorithms to `AlgorithmsBlock.py` (the SFT dataset references the 12 algorithm library)
+- Add new components to `Components.py` (the dataset teaches the model about available components)
+- Change the `CipherSpec` or `ImprovementPatch` schemas
+- Want the fine-tuned model to know about new capabilities
+
+Re-fine-tuning is **NOT required** if you:
+- Only run benchmarks or evaluations
+- Use the base OpenAI models (without fine-tuning)
+- Only modify the evaluation or evolution modules
+
+### Step-by-Step Fine-Tuning Process
+
+**1. Regenerate the SFT dataset** (if algorithms/components changed):
+
+```bash
+python scripts/generate_sft_dataset.py
+```
+
+This creates 450 training + 50 validation examples under `data/sft/` covering:
+- CipherSpec generation for all 12 algorithms
+- ImprovementPatch suggestions
+- Python code generation
+- KB Q&A about cipher concepts
+
+If you added new algorithms, edit the `ALGORITHMS` dict at the top of `scripts/generate_sft_dataset.py` first to include your new algorithms and their specs.
+
+**2. Run the fine-tuning job:**
+
+```bash
+python scripts/finetune_openai.py
+```
+
+This will:
+1. Validate `data/sft/train.jsonl` and `data/sft/valid.jsonl`
+2. Upload both files to OpenAI
+3. Create a fine-tuning job on `gpt-4.1-mini-2025-04-14`
+4. Monitor progress (typically 10-30 minutes)
+5. Automatically update your `.env` with the new `FINETUNED_MODEL=ft:gpt-4.1-mini-...`
+
+**3. Verify the fine-tuned model:**
+
+```bash
+python scripts/test_finetuned_model.py
+```
+
+**4. Use it in the app:**
+
+The fine-tuned model ID is stored in `.env` as `FINETUNED_MODEL`. You can configure the app to use it by setting:
+
+```env
+OPENAI_MODEL_FAST=ft:gpt-4.1-mini-2025-04-14:your-org:cipher-lab:xxxxx
+```
+
+### Current SFT Dataset
+
+| File          | Examples | Content                                           |
+| ------------- | -------- | ------------------------------------------------- |
+| `train.jsonl` | 450      | CipherSpec, ImprovementPatch, code, Q&A examples  |
+| `valid.jsonl` | 48       | Validation split (different seeds)                 |
+
+---
+
+## Project Structure
 
 ```
 My-New-Project/
-├── app/
-│   └── streamlit_app.py      # Main Streamlit application
-├── cipherlab/                 # Core cipher library package
-│   ├── cipher/
-│   │   ├── builder.py        # SPN, Feistel, ARX cipher builders
-│   │   ├── components_builtin.py  # All 22 cipher components
-│   │   ├── exporter.py       # Python code generator
-│   │   ├── metrics.py        # Avalanche and scoring
-│   │   ├── registry.py       # Component registry
-│   │   ├── spec.py           # CipherSpec and ImprovementPatch models
-│   │   └── validator.py      # Specification validator
-│   ├── llm/
-│   │   ├── assistant.py      # AI improvement suggestions
-│   │   └── openai_provider.py # OpenAI + OpenRouter dual-client API wrapper
-│   └── rag/
-│       └── retriever.py      # RAG retrieval system
-├── data/sft/                  # Fine-tuning dataset
-│   ├── train.jsonl           # 450 training examples
-│   └── valid.jsonl           # 48 validation examples
-├── kb/                        # Built-in knowledge base
-├── scripts/
-│   ├── build_kb_index.py     # Build RAG index
-│   ├── finetune_openai.py    # Run fine-tuning
-│   ├── check_finetune_status.py
-│   └── test_finetuned_model.py
-├── AlgorithmsBlock.py        # Standalone cipher implementations
-├── Components.py             # All cipher component functions
-├── .env                      # Environment configuration
-└── requirements.txt          # Python dependencies
++-- app/
+|   +-- streamlit_app.py           # Main Streamlit application (6-stage UI)
++-- cipherlab/                      # Core cipher library package
+|   +-- cipher/
+|   |   +-- builder.py             # SPN, Feistel, ARX cipher builders
+|   |   +-- components_builtin.py  # All cipher components
+|   |   +-- cryptanalysis.py       # DDT/LAT, Hamming distance, bit-flip utilities
+|   |   +-- exporter.py            # Python code generator
+|   |   +-- metrics.py             # Avalanche scoring + evaluate_full()
+|   |   +-- registry.py            # Component registry
+|   |   +-- spec.py                # CipherSpec and ImprovementPatch (Pydantic)
+|   |   +-- validator.py           # Specification validator
+|   +-- evaluation/
+|   |   +-- roundtrip.py           # P = D(E(P,K),K) verification (Phase 3)
+|   |   +-- avalanche.py           # SAC per-bit analysis (Phase 3)
+|   |   +-- sbox_analysis.py       # DDT/LAT S-box profiling (Phase 3)
+|   |   +-- report.py              # EvaluationReport aggregation (Phase 3)
+|   |   +-- feedback.py            # Diagnostic parser + DeepSeek-R1 feedback (Phase 3)
+|   |   +-- benchmark_runner.py    # Automated model comparison orchestrator (Phase 5)
+|   |   +-- latex_exporter.py      # JSON -> LaTeX tables (Phase 5)
+|   |   +-- dataset_exporter.py    # JSON -> JSONL dataset (Phase 5)
+|   +-- evolution/
+|   |   +-- ast_analyzer.py        # AST dependency mapping + mismatch detection (Phase 4)
+|   |   +-- component_mutator.py   # DeepSeek-R1 component rewriting (Phase 4)
+|   |   +-- dynamic_loader.py      # Sandboxed compilation + registry injection (Phase 4)
+|   +-- llm/
+|   |   +-- assistant.py           # AI improvement suggestions
+|   |   +-- openai_provider.py     # OpenAI + OpenRouter dual-client wrapper
+|   +-- rag/
+|   |   +-- retriever.py           # Hybrid BM25 + dense retrieval
+|   +-- utils/
+|   |   +-- repro.py               # JSON I/O, timestamps, run directories
+|   +-- config.py                   # Settings (API keys, model names, paths)
+|   +-- context_logger.py          # Cipher state capture for LLM context
++-- data/sft/                       # Fine-tuning dataset
+|   +-- train.jsonl                # 450 training examples
+|   +-- valid.jsonl                # 48 validation examples
++-- kb/                             # Built-in knowledge base documents
++-- scripts/
+|   +-- build_kb_index.py          # Build RAG search index
+|   +-- generate_sft_dataset.py    # Generate fine-tuning data
+|   +-- finetune_openai.py         # Run OpenAI fine-tuning job
+|   +-- check_finetune_status.py   # Check fine-tuning progress
+|   +-- test_finetuned_model.py    # Test fine-tuned model
+|   +-- run_benchmarks.py          # Phase 5 benchmark CLI
++-- tests/
+|   +-- test_roundtrip.py          # 15 roundtrip tests (3 hand-crafted + 12 parametrized)
++-- AlgorithmsBlock.py             # 12 LWC algorithm implementations + templates
++-- Components.py                  # 27+ cipher component functions + ComponentRegistry
++-- .env.example                   # Environment variable template
++-- requirements.txt               # Python dependencies
 ```
 
 ---
 
-## 🔧 Supported Algorithms (Lightweight Cryptography)
-
-The system supports **12 lightweight block cipher algorithms** across 3 architectures, targeting IoT and resource-constrained environments:
+## Supported Algorithms (12 Lightweight Block Ciphers)
 
 ### SPN (Substitution-Permutation Network)
 
@@ -354,7 +317,7 @@ The system supports **12 lightweight block cipher algorithms** across 3 architec
 
 ---
 
-## 📦 Available Components (22 Total)
+## Available Components (27+)
 
 ### Key Schedules (3)
 
@@ -362,69 +325,100 @@ The system supports **12 lightweight block cipher algorithms** across 3 architec
 - `ks.des_style` - DES-style rotation and permutation
 - `ks.blowfish_style` - Blowfish P-array initialization
 
-### S-boxes (5)
+### S-boxes (7)
 
-- `sbox.aes` - AES 8-bit S-box
+- `sbox.aes` - AES 8-bit S-box (GF(2^8) inverse + affine)
+- `sbox.present` - PRESENT 4-bit S-box
+- `sbox.gift` - GIFT 4-bit S-box
 - `sbox.des` - DES S-boxes (S1-S8)
 - `sbox.blowfish` - Blowfish key-dependent S-boxes
-- `sbox.serpent` - Serpent 4-bit S-boxes (legacy, still available)
-- `sbox.identity` - No substitution (testing / TEA/XTEA/SIMON)
+- `sbox.serpent` - Serpent 4-bit S-boxes
+- `sbox.identity` - No substitution (testing baseline)
 
-### Permutations (4)
+### F-functions (4, for Feistel)
+
+- `sbox.tea_f` - TEA F-function
+- `sbox.xtea_f` - XTEA F-function
+- `sbox.simon_f` - SIMON F-function
+- `sbox.hight_f` - HIGHT F-function
+
+### Permutations (6)
 
 - `perm.aes_shiftrows` - AES ShiftRows
+- `perm.present` - PRESENT 64-bit bit permutation
+- `perm.gift` - GIFT 128-bit bit permutation
 - `perm.des_ip` - DES Initial Permutation
-- `perm.serpent` - Serpent bit permutation (legacy, still available)
+- `perm.serpent` - Serpent bit permutation
 - `perm.identity` - No permutation
 
 ### Linear Layers (3)
 
-- `linear.aes_mixcolumns` - AES MixColumns
-- `linear.twofish_mds` - Twofish MDS matrix (legacy, still available)
+- `linear.aes_mixcolumns` - AES MixColumns (GF(2^8))
+- `linear.twofish_mds` - Twofish MDS matrix
 - `linear.identity` - No mixing
 
 ### ARX Operations (4)
 
-- `arx.add_mod32` - Modular addition (32-bit words, used by SPECK/RC5/LEA)
+- `arx.add_mod32` - Modular addition (32-bit words)
 - `arx.rotate_left_3` - RC5/SPECK-style rotation
 - `arx.rotate_left_5` - LEA-style rotation
-- `arx.mul_mod16` - IDEA multiplication mod 2^16+1 (legacy, still available)
+- `arx.mul_mod16` - IDEA multiplication mod 2^16+1
 
 ---
 
-## 🎓 Fine-Tuning (Optional)
+## User Interface Guide
 
-The repository includes a supervised fine-tuning dataset under `data/sft/`:
+The Streamlit application is organized into 6 sections:
 
-| File          | Examples | Content             |
-| ------------- | -------- | ------------------- |
-| `train.jsonl` | 450      | Training examples   |
-| `valid.jsonl` | 48       | Validation examples |
+### Sidebar: Settings Panel
 
-### Dataset Coverage
+Configure API keys (OpenAI, OpenRouter), model selection (DeepSeek-V3 fast vs DeepSeek-R1 reasoning), and RAG parameters (top-k chunks, hybrid alpha).
 
-- CipherSpec generation from natural language
-- ImprovementPatch suggestions
-- Python code generation with comments
-- KB question answering
-- Algorithm comparisons
+### Section 1: Choose Architecture and Components
 
-### Run Fine-Tuning
+Select SPN/Feistel/ARX, configure block size, key size, rounds, and pick components from the registry. Validation status is shown immediately.
 
-```bash
-python scripts/finetune_openai.py
-```
+### Section 2: Evaluate Locally (No API Cost)
 
-The script will:
+Run avalanche tests to measure plaintext and key sensitivity. Heuristic issues are flagged automatically.
 
-1. Validate the dataset format
-2. Upload files to OpenAI
-3. Create and monitor the fine-tuning job
-4. Update `.env` with the new model ID
+### Section 3: Advanced Evaluation (SAC + S-box Analysis)
+
+- **Roundtrip tests**: Verifies correctness by checking that P = D(E(P,K),K) holds for 1000+ random plaintext/key vectors. If decryption does not perfectly recover every plaintext, the cipher has a functional bug.
+- **SAC (Strict Avalanche Criterion) analysis**: Measures diffusion quality. For each input bit, the test flips that single bit and checks whether each output bit changes with probability ~0.5. A well-designed cipher should have SAC deviation close to 0 (ideal mean = 0.5, ideal deviation = 0.0). High deviation indicates weak diffusion — some input bits do not sufficiently influence the output.
+- **S-box profiling**:
+  - **DDT max (Difference Distribution Table)**: Measures resistance to *differential cryptanalysis*. The DDT records how often a given input difference produces a given output difference through the S-box. A lower DDT max means the S-box spreads input differences more uniformly, making differential attacks harder. An ideal n-bit S-box has DDT max = 2 (for n >= 4). A DDT max equal to the S-box size (e.g., 256 for 8-bit) indicates a completely linear/broken S-box.
+  - **LAT max (Linear Approximation Table)**: Measures resistance to *linear cryptanalysis*. The LAT records the correlation between linear combinations of input bits and output bits. A lower LAT max means the S-box resists linear approximations better. For an ideal 8-bit S-box, the LAT max should be as low as possible (AES achieves LAT max = 16 out of 128).
+  - **Bijectivity**: Checks whether the S-box is a one-to-one mapping (every input maps to a unique output). A bijective S-box is invertible, which is required for decryption. Non-bijective S-boxes lose information and cannot be reversed.
+- **I/O compatibility check**: AST-based mismatch detection verifies that each component's input/output sizes are compatible with adjacent pipeline stages (e.g., the permutation output width matches the linear layer input width).
+
+### Section 4: AI Improvement Suggestions
+
+DeepSeek-R1 (or OpenAI fallback) analyzes diagnostics and proposes an `ImprovementPatch` with component swaps, round changes, and rationale. Patches can be applied with automatic mismatch detection and adaptive evolution.
+
+### Section 5: Export Cipher as Python Code
+
+Download a standalone Python module with encrypt/decrypt functions and self-test. Save reproducible runs to `runs/`.
+
+### Section 6: KB Chat
+
+Conversational interface to query the lightweight cryptography knowledge base with RAG-powered context retrieval.
 
 ---
 
-## ⚠️ Security Disclaimer
+## Architecture Overview (5 Phases)
+
+| Phase | Name | Key Capability |
+|-------|------|----------------|
+| 1 | Dual-API Gateway | OpenAI Responses API + DeepSeek via OpenRouter Chat Completions |
+| 2 | Component Optimization | 27+ mathematically accurate components, 12 LWC algorithms |
+| 3 | Deterministic Evaluation | Roundtrip, SAC, DDT/LAT - all local, no API cost |
+| 4 | Adaptive Evolution | AST mismatch detection, LLM component mutation, sandboxed loading |
+| 5 | Empirical Benchmarking | Automated model comparison, LaTeX tables, JSONL dataset export |
+
+---
+
+## Security Disclaimer
 
 1. **Local avalanche tests are NOT cryptanalysis** - They cannot detect subtle weaknesses
 2. **Do not interpret any score as security** - A high score does not mean the cipher is secure
@@ -433,17 +427,6 @@ The script will:
 
 ---
 
-## 📄 License
+## License
 
 This project is for educational and research purposes only.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please ensure any additions:
-
-- Include proper documentation
-- Follow the existing code style
-- Add appropriate tests
-- Update the README if needed
