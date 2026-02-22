@@ -17,6 +17,19 @@ from .feedback import (
     build_feedback_prompt,
     run_feedback_cycle,
 )
+from .benchmark_runner import (
+    ModelConfig,
+    ExperimentConfig,
+    BenchmarkSuiteConfig,
+    IterationMetrics,
+    ExperimentResult,
+    BenchmarkSuiteResult,
+    build_default_suite,
+    run_single_experiment,
+    run_benchmark_suite,
+)
+from .latex_exporter import LaTeXTable, LaTeXExporter
+from .dataset_exporter import export_dataset_jsonl, export_full_jsonl
 
 __all__ = [
     "RoundtripResult",
@@ -34,4 +47,17 @@ __all__ = [
     "parse_evaluation_results",
     "build_feedback_prompt",
     "run_feedback_cycle",
+    "ModelConfig",
+    "ExperimentConfig",
+    "BenchmarkSuiteConfig",
+    "IterationMetrics",
+    "ExperimentResult",
+    "BenchmarkSuiteResult",
+    "build_default_suite",
+    "run_single_experiment",
+    "run_benchmark_suite",
+    "LaTeXTable",
+    "LaTeXExporter",
+    "export_dataset_jsonl",
+    "export_full_jsonl",
 ]
