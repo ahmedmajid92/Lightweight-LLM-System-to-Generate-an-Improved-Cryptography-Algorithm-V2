@@ -62,10 +62,17 @@ class CipherContextSnapshot:
             desc = sig.get('docstring', 'N/A')
             lines.append(f"  - {sig['component_id']} ({sig['kind']}): {desc}")
         if self.metrics:
-            pt_av = self.metrics.get('pt_avalanche', self.metrics.get('plaintext_avalanche_mean', 'N/A'))
-            key_av = self.metrics.get('key_avalanche', self.metrics.get('key_avalanche_mean', 'N/A'))
-            score = self.metrics.get('overall_score', 'N/A')
-            lines.append(f"Metrics: pt_avalanche={pt_av}, key_avalanche={key_av}, score={score}")
+            # Handle both flat and nested metric dicts
+            pt_raw = self.metrics.get('plaintext_avalanche', {})
+            key_raw = self.metrics.get('key_avalanche', {})
+            scores = self.metrics.get('scores', {})
+            pt_av = pt_raw.get('mean', 'N/A') if isinstance(pt_raw, dict) else pt_raw
+            key_av = key_raw.get('mean', 'N/A') if isinstance(key_raw, dict) else key_raw
+            score = scores.get('overall', 'N/A') if isinstance(scores, dict) else scores
+            pt_str = f"{pt_av:.4f}" if isinstance(pt_av, (int, float)) else str(pt_av)
+            key_str = f"{key_av:.4f}" if isinstance(key_av, (int, float)) else str(key_av)
+            score_str = f"{score:.4f}" if isinstance(score, (int, float)) else str(score)
+            lines.append(f"Metrics: pt_avalanche={pt_str}, key_avalanche={key_str}, overall_score={score_str}")
         if self.issues:
             lines.append("Issues: " + "; ".join(self.issues))
         return "\n".join(lines)
@@ -139,3 +146,72 @@ def build_context_snapshot(
         metrics=metrics,
         issues=issues or [],
     )
+
+
+# ---------------------------------------------------------------------------
+# Tiered context for design-review copilot (Option A)
+# ---------------------------------------------------------------------------
+
+def build_copilot_context(
+    spec,
+    registry: ComponentRegistry,
+    metrics: Optional[Dict] = None,
+    issues: Optional[List[str]] = None,
+    iteration_history=None,
+    diagnostics: Optional[List] = None,
+    pending_patch: Optional[Dict] = None,
+) -> str:
+    """Build tiered context string for the design-review copilot.
+
+    Tier 1 (always): working spec summary + iteration history summary (~500 tokens)
+    Tier 2 (if available): active diagnostics + last patch details (~300 tokens)
+
+    RAG KB snippets are added separately by the caller.
+
+    Args:
+        spec: Current working CipherSpec.
+        registry: Component registry.
+        metrics: Basic avalanche metrics dict (from evaluate_and_score).
+        issues: Heuristic issue strings.
+        iteration_history: IterationHistory instance (optional).
+        diagnostics: List of EvaluationDiagnostic (optional).
+        pending_patch: Dict with pending patch info (optional).
+
+    Returns:
+        Formatted context string for system prompt injection.
+    """
+    sections: List[str] = []
+
+    # --- Tier 1: Always included ---
+
+    # Working spec summary
+    snapshot = build_context_snapshot(spec, registry, metrics, issues)
+    sections.append("## Current Working Design\n" + snapshot.to_prompt_context())
+
+    # Iteration history summary
+    if iteration_history is not None:
+        hist_text = iteration_history.to_context_summary(max_records=8)
+        if hist_text and "No improvement" not in hist_text:
+            sections.append("## Improvement History\n" + hist_text)
+
+    # --- Tier 2: If available ---
+
+    # Active diagnostics (up to 5)
+    if diagnostics:
+        diag_lines = []
+        for d in diagnostics[:5]:
+            diag_lines.append(d.to_prompt_block())
+        sections.append("## Active Diagnostics\n" + "\n".join(diag_lines))
+
+    # Last pending/staged patch
+    if pending_patch:
+        patch_obj = pending_patch.get("patch")
+        if patch_obj:
+            patch_lines = [f"Summary: {patch_obj.summary}"]
+            if hasattr(patch_obj, "rationale") and patch_obj.rationale:
+                for r in patch_obj.rationale[:3]:
+                    patch_lines.append(f"- {r}")
+            patch_lines.append(f"Model: {pending_patch.get('model_used', 'unknown')}")
+            sections.append("## Pending Patch Under Review\n" + "\n".join(patch_lines))
+
+    return "\n\n".join(sections)

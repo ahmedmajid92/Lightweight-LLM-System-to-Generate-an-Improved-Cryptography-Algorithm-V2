@@ -326,22 +326,27 @@ def run_feedback_cycle(
     provider = OpenAIProvider(
         api_key=settings.openai_api_key,
         openrouter_api_key=settings.openrouter_api_key,
+        local_reasoning_base_url=settings.local_reasoning_base_url if settings.local_llm_enabled else None,
+        local_api_key=settings.local_llm_api_key,
+        local_timeout_seconds=settings.local_llm_timeout_seconds,
     )
 
     reasoning_trace = None
 
-    if provider.openrouter_client and settings.openrouter_api_key:
-        # Use DeepSeek-R1 via OpenRouter for chain-of-thought reasoning
-        model_used = settings.openrouter_model_reasoning
-        patch, raw = provider.generate_json_chat(
-            model=model_used,
-            system=system,
-            user=user,
-            schema=ImprovementPatch,
-            temperature=0.2,
-            max_tokens=4096,
-            use_openrouter=True,
-        )
+    patch, raw, model_used = provider.generate_structured_with_fallback(
+        openrouter_model=settings.openrouter_model_reasoning if settings.openrouter_api_key else None,
+        fallback_model=settings.openai_model_quality,
+        local_model=settings.local_reasoning_model if settings.local_llm_enabled else None,
+        local_role="reasoning",
+        system=system,
+        user=user,
+        schema=ImprovementPatch,
+        primary_temperature=0.2,
+        primary_max_tokens=4096,
+        fallback_temperature=0.2,
+        fallback_max_output_tokens=1200,
+    )
+    if model_used == settings.openrouter_model_reasoning:
         # Extract reasoning trace if available (DeepSeek-R1 may include it)
         if hasattr(raw, 'choices') and raw.choices:
             content = raw.choices[0].message.content or ""
@@ -349,17 +354,6 @@ def run_feedback_cycle(
                 start = content.index("<think>") + len("<think>")
                 end = content.index("</think>") if "</think>" in content else len(content)
                 reasoning_trace = content[start:end].strip()
-    else:
-        # Fall back to OpenAI Structured Outputs
-        model_used = settings.openai_model_quality
-        patch, raw = provider.generate_structured(
-            model=model_used,
-            system=system,
-            user=user,
-            schema=ImprovementPatch,
-            temperature=0.2,
-            max_output_tokens=1200,
-        )
 
     result = FeedbackCycleResult(
         diagnostics=diagnostics,

@@ -34,10 +34,13 @@ def suggest_improvements(
     rag_context: str,
     model: str,
     openrouter_model: Optional[str] = None,
-) -> tuple[ImprovementPatch, Any]:
+) -> tuple[ImprovementPatch, Any, str]:
     provider = OpenAIProvider(
         api_key=settings.openai_api_key,
         openrouter_api_key=settings.openrouter_api_key,
+        local_reasoning_base_url=settings.local_reasoning_base_url if settings.local_llm_enabled else None,
+        local_api_key=settings.local_llm_api_key,
+        local_timeout_seconds=settings.local_llm_timeout_seconds,
     )
 
     user = (
@@ -61,24 +64,17 @@ def suggest_improvements(
         + "- f_perm: perm.identity\n"
     )
 
-    # Use OpenRouter (DeepSeek) if configured, else fall back to OpenAI
-    if provider.openrouter_client and openrouter_model:
-        patch, raw = provider.generate_json_chat(
-            model=openrouter_model,
-            system=SYSTEM_IMPROVER,
-            user=user,
-            schema=ImprovementPatch,
-            temperature=0.2,
-            max_tokens=4096,
-            use_openrouter=True,
-        )
-    else:
-        patch, raw = provider.generate_structured(
-            model=model,
-            system=SYSTEM_IMPROVER,
-            user=user,
-            schema=ImprovementPatch,
-            temperature=0.2,
-            max_output_tokens=800,
-        )
-    return patch, raw
+    patch, raw, model_used = provider.generate_structured_with_fallback(
+        openrouter_model=openrouter_model,
+        fallback_model=model,
+        local_model=settings.local_reasoning_model if settings.local_llm_enabled else None,
+        local_role="reasoning",
+        system=SYSTEM_IMPROVER,
+        user=user,
+        schema=ImprovementPatch,
+        primary_temperature=0.2,
+        primary_max_tokens=4096,
+        fallback_temperature=0.2,
+        fallback_max_output_tokens=800,
+    )
+    return patch, raw, model_used

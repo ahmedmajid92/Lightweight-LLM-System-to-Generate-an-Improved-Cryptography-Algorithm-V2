@@ -1,16 +1,78 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from ..config import Settings
 from .bm25 import BM25Index, build_bm25
 from .chunker import Chunk, chunk_document
-from .dense import DenseIndex, embed_texts_openai
+from .dense import DenseIndex, embed_texts_local, embed_texts_openai
 from .documents import load_documents_from_dirs
+
+
+logger = logging.getLogger("cipherlab.rag")
+
+
+def _build_dense_vectors(settings: Settings, texts: List[str]) -> Tuple[np.ndarray, Dict[str, Any]]:
+    provider = settings.rag_embedding_provider
+    errors: List[str] = []
+
+    if provider in {"auto", "local"} and settings.rag_local_embeddings_enabled:
+        try:
+            vecs = embed_texts_local(
+                base_url=settings.rag_local_embedding_base_url,
+                api_key=settings.local_llm_api_key,
+                model=settings.rag_local_embedding_model,
+                texts=texts,
+                dimensions=settings.rag_local_embedding_dim,
+                prefix="search_document: ",
+                timeout_seconds=settings.rag_local_embedding_timeout_seconds,
+            )
+            metadata = {
+                "embedding_provider": "local",
+                "embedding_model": settings.rag_local_embedding_model,
+                "embedding_dimension": int(vecs.shape[1]),
+                "prefix_scheme": "nomic-search-document-query",
+                "document_prefix": "search_document: ",
+                "query_prefix": "search_query: ",
+                "normalization": "l2",
+                "dense_weight": settings.rag_hybrid_alpha,
+                "bm25_weight": settings.rag_bm25_weight,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            return vecs, metadata
+        except Exception as exc:
+            errors.append(f"local embeddings failed: {exc}")
+            if provider == "local":
+                raise
+            logger.warning("[rag] Local embedding index build failed: %s. Trying online embeddings.", exc)
+
+    if provider in {"auto", "openai"}:
+        if settings.openai_api_key:
+            vecs = embed_texts_openai(
+                api_key=settings.openai_api_key,
+                model=settings.openai_embedding_model,
+                texts=texts,
+            )
+            metadata = {
+                "embedding_provider": "openai",
+                "embedding_model": settings.openai_embedding_model,
+                "embedding_dimension": int(vecs.shape[1]),
+                "prefix_scheme": "none",
+                "normalization": "l2",
+                "dense_weight": settings.rag_hybrid_alpha,
+                "bm25_weight": settings.rag_bm25_weight,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            return vecs, metadata
+        errors.append("OPENAI_API_KEY is missing")
+
+    raise RuntimeError("Could not build dense embeddings: " + "; ".join(errors))
 
 
 def build_kb_index(settings: Settings) -> None:
@@ -58,15 +120,13 @@ def build_kb_index(settings: Settings) -> None:
 
     # Optional embeddings
     if settings.rag_use_embeddings:
-        if not settings.openai_api_key:
-            raise RuntimeError("RAG_USE_EMBEDDINGS=true but OPENAI_API_KEY is missing")
-        vecs = embed_texts_openai(
-            api_key=settings.openai_api_key,
-            model=settings.openai_embedding_model,
-            texts=bm25_texts,
+        vecs, metadata = _build_dense_vectors(settings, bm25_texts)
+        dense = DenseIndex(ids=[c.chunk_id for c in chunks], vectors=vecs, metadata=metadata)
+        dense.save(
+            str(out_dir / "dense_ids.json"),
+            str(out_dir / "embeddings.npy"),
+            str(out_dir / "dense_metadata.json"),
         )
-        dense = DenseIndex(ids=[c.chunk_id for c in chunks], vectors=vecs)
-        dense.save(str(out_dir / "dense_ids.json"), str(out_dir / "embeddings.npy"))
 
 
 def load_chunks(settings: Settings) -> List[dict]:
@@ -93,6 +153,7 @@ def load_dense(settings: Settings) -> Optional[DenseIndex]:
     root = Path(settings.project_root)
     ids_path = root / settings.kb_index_dir / "dense_ids.json"
     vecs_path = root / settings.kb_index_dir / "embeddings.npy"
+    metadata_path = root / settings.kb_index_dir / "dense_metadata.json"
     if not ids_path.exists() or not vecs_path.exists():
         return None
-    return DenseIndex.load(str(ids_path), str(vecs_path))
+    return DenseIndex.load(str(ids_path), str(vecs_path), str(metadata_path))

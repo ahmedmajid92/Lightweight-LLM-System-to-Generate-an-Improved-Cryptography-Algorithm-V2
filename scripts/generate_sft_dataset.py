@@ -12,8 +12,15 @@ Run: python scripts/generate_sft_dataset.py
 
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Dict, List, Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from AlgorithmsBlock import get_template, list_algorithms
 
 # Configuration
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "sft"
@@ -38,24 +45,9 @@ ALGORITHMS = {
     "LEA":      {"arch": "ARX",     "block": 128, "key": [128],      "rounds": [24]},
 }
 
-# Components by architecture (aligned with LWC focus)
-SPN_COMPONENTS = {
-    "sbox": ["sbox.aes", "sbox.identity"],
-    "perm": ["perm.aes_shiftrows", "perm.identity"],
-    "linear": ["linear.aes_mixcolumns", "linear.identity"],
-    "key_schedule": ["ks.sha256_kdf"],
-}
-
-FEISTEL_COMPONENTS = {
-    "f_sbox": ["sbox.aes", "sbox.des", "sbox.blowfish", "sbox.identity"],
-    "f_perm": ["perm.identity"],
-    "key_schedule": ["ks.sha256_kdf", "ks.des_style", "ks.blowfish_style"],
-}
-
-ARX_COMPONENTS = {
-    "arx_add": ["arx.add_mod32"],
-    "arx_rotate": ["arx.rotate_left_3", "arx.rotate_left_5"],
-    "key_schedule": ["ks.sha256_kdf"],
+REFERENCE_COMPONENTS = {
+    name: dict(get_template(name, seed=1).components)
+    for name in list_algorithms()
 }
 
 # System prompts (LWC-focused)
@@ -87,28 +79,8 @@ def gen_cipherspec_example(algo: str, seed: int) -> Dict:
     block = info["block"]
     key = random.choice(info["key"])
     rounds = random.choice(info["rounds"])
-    
-    # Select components based on architecture
-    if arch == "SPN":
-        components = {
-            "sbox": random.choice(SPN_COMPONENTS["sbox"]),
-            "perm": random.choice(SPN_COMPONENTS["perm"]),
-            "linear": random.choice(SPN_COMPONENTS["linear"]),
-            "key_schedule": random.choice(SPN_COMPONENTS["key_schedule"]),
-        }
-    elif arch == "FEISTEL":
-        components = {
-            "f_sbox": random.choice(FEISTEL_COMPONENTS["f_sbox"]),
-            "f_perm": random.choice(FEISTEL_COMPONENTS["f_perm"]),
-            "key_schedule": random.choice(FEISTEL_COMPONENTS["key_schedule"]),
-        }
-    else:  # ARX
-        components = {
-            "arx_add": random.choice(ARX_COMPONENTS["arx_add"]),
-            "arx_rotate": random.choice(ARX_COMPONENTS["arx_rotate"]),
-            "key_schedule": random.choice(ARX_COMPONENTS["key_schedule"]),
-        }
-    
+    components = dict(REFERENCE_COMPONENTS[algo])
+
     name = f"{algo}_Spec_{seed}"
     
     user_prompt = f"""Create a CipherSpec for a {arch} cipher based on {algo}.
@@ -144,18 +116,41 @@ def gen_improvement_example(algo: str, seed: int) -> Dict:
     """Generate an ImprovementPatch example."""
     info = ALGORITHMS[algo]
     arch = info["arch"]
-    
-    # Create a "weak" spec with identity components
+    reference_components = dict(REFERENCE_COMPONENTS[algo])
+
+    # Create a "weak" spec, then restore the algorithm-style reference design.
     if arch == "SPN":
-        weak_components = {"sbox": "sbox.identity", "perm": "perm.identity", "linear": "linear.identity", "key_schedule": "ks.sha256_kdf"}
-        improved_components = {"sbox": "sbox.aes", "perm": "perm.aes_shiftrows", "linear": "linear.aes_mixcolumns"}
+        weak_components = {
+            "sbox": "sbox.identity",
+            "perm": "perm.identity",
+            "linear": "linear.identity",
+            "key_schedule": reference_components["key_schedule"],
+        }
+        rationale_tail = "Restoring the algorithm-style substitution and diffusion layers improves confusion and bit spreading."
     elif arch == "FEISTEL":
-        weak_components = {"f_sbox": "sbox.identity", "f_perm": "perm.identity", "key_schedule": "ks.sha256_kdf"}
-        improved_components = {"f_sbox": "sbox.aes"}
+        weak_components = {
+            "f_sbox": "sbox.identity",
+            "f_perm": "perm.identity",
+            "key_schedule": "ks.sha256_kdf",
+        }
+        rationale_tail = "Restoring the algorithm-style round function improves mixing without changing the Feistel structure."
     else:  # ARX
-        weak_components = {"arx_add": "arx.add_mod32", "arx_rotate": "arx.rotate_left_3", "key_schedule": "ks.sha256_kdf"}
-        improved_components = {"arx_rotate": "arx.rotate_left_5"}
-    
+        weak_rotate = "arx.rotate_left_5"
+        if reference_components["arx_rotate"] == weak_rotate:
+            weak_rotate = "arx.rotate_left_3"
+        weak_components = {
+            "arx_add": reference_components["arx_add"],
+            "arx_rotate": weak_rotate,
+            "key_schedule": reference_components["key_schedule"],
+        }
+        rationale_tail = "Restoring the algorithm-style rotation schedule improves ARX bit dispersion with minimal structural change."
+
+    improved_components = {
+        name: value
+        for name, value in reference_components.items()
+        if weak_components.get(name) != value
+    }
+
     low_avalanche = round(random.uniform(0.2, 0.35), 2)
     
     spec = {
@@ -183,14 +178,14 @@ Metrics JSON:
 
 The avalanche score is low (ideal is ~0.5). Suggest improvements."""
 
-    new_rounds = random.choice([12, 14, 16])
+    new_rounds = random.choice(info["rounds"])
     
     patch = {
-        "summary": f"Improve {algo}-style cipher diffusion and nonlinearity for better avalanche.",
+        "summary": f"Restore the {algo}-style reference structure to improve avalanche.",
         "rationale": [
             f"Identity components provide minimal confusion/diffusion in {arch} structure.",
             f"Increasing rounds from 8 to {new_rounds} improves bit mixing.",
-            "Using cryptographically designed S-boxes increases nonlinearity."
+            rationale_tail,
         ],
         "new_rounds": new_rounds,
         "replace_components": improved_components,
@@ -211,14 +206,8 @@ def gen_code_example(algo: str, seed: int) -> Dict:
     block = info["block"]
     key = random.choice(info["key"])
     rounds = random.choice(info["rounds"])
-    
-    if arch == "SPN":
-        components = {"sbox": "sbox.aes", "perm": "perm.aes_shiftrows", "linear": "linear.aes_mixcolumns", "key_schedule": "ks.sha256_kdf"}
-    elif arch == "FEISTEL":
-        components = {"f_sbox": "sbox.aes", "f_perm": "perm.identity", "key_schedule": "ks.sha256_kdf"}
-    else:
-        components = {"arx_add": "arx.add_mod32", "arx_rotate": "arx.rotate_left_5", "key_schedule": "ks.sha256_kdf"}
-    
+    components = dict(REFERENCE_COMPONENTS[algo])
+
     name = f"Auto{algo}_{seed}"
     
     spec = {
@@ -563,16 +552,20 @@ def generate_dataset(n_train: int, n_valid: int, seed: int = 42):
     
     # Generate validation set (different seeds)
     random.seed(seed + 1000)
-    for i in range(n_valid // 4):
-        valid_examples.append(gen_cipherspec_example(random.choice(algos), 1000 + i))
-        valid_examples.append(gen_improvement_example(random.choice(algos), 1100 + i))
-        valid_examples.append(gen_code_example(random.choice(algos), 1200 + i))
-        valid_examples.append(gen_qa_example(1300 + i))
+    for i in range(n_valid):
+        kind = i % 4
+        if kind == 0:
+            valid_examples.append(gen_cipherspec_example(random.choice(algos), 1000 + i))
+        elif kind == 1:
+            valid_examples.append(gen_improvement_example(random.choice(algos), 1100 + i))
+        elif kind == 2:
+            valid_examples.append(gen_code_example(random.choice(algos), 1200 + i))
+        else:
+            valid_examples.append(gen_qa_example(1300 + i))
     
     # Shuffle validation
     random.shuffle(valid_examples)
-    valid_examples = valid_examples[:n_valid]
-    
+
     return train_examples, valid_examples
 
 

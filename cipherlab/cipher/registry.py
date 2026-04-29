@@ -27,5 +27,9 @@ class ComponentRegistry:
         out.sort(key=lambda c: c.component_id)
         return out
 
+    def register(self, component: Component) -> None:
+        """Add or replace a component in the registry."""
+        self._components[component.component_id] = component
+
     def exists(self, component_id: str) -> bool:
         return component_id in self._components

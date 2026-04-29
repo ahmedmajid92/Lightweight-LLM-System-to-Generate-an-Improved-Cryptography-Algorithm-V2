@@ -79,9 +79,7 @@ def ks_sha256_kdf(key: bytes, *, rounds: int, out_len: int, seed: int = 0) -> Li
     for r in range(rounds + 1):
         r_b = int(r).to_bytes(4, "little", signed=False)
         base = _sha256(key + seed_b + r_b)
-        buf = b"""
-    util += """\
-"
+        buf = b""
         ctr = 0
         while len(buf) < out_len:
             buf += _sha256(base + int(ctr).to_bytes(4, "little", signed=False))

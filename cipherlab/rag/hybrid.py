@@ -33,6 +33,7 @@ class HybridRetriever:
         if self.dense is not None and query_vec is not None:
             dense_list = self.dense.search(query_vec, top_k=max(k * 3, k))
         dense_dict = {doc_id: score for doc_id, score in dense_list}
+        has_dense_scores = bool(dense_dict)
 
         # Normalize and combine
         combined: Dict[str, float] = {}
@@ -41,8 +42,8 @@ class HybridRetriever:
         for doc_id in ids:
             s = sparse_dict.get(doc_id, 0.0) / sparse_max
             d_raw = dense_dict.get(doc_id, 0.0)
-            # cosine in [-1,1] -> [0,1]
-            d = (d_raw + 1.0) / 2.0
+            # cosine in [-1,1] -> [0,1], but only when dense search actually ran
+            d = (d_raw + 1.0) / 2.0 if has_dense_scores and doc_id in dense_dict else 0.0
             score = (1.0 - self.alpha) * s + self.alpha * d
             combined[doc_id] = score
             details[doc_id] = {"sparse_norm": s, "dense_cos": d_raw, "dense_norm": d}

@@ -1,4 +1,5 @@
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -10,12 +11,27 @@ if str(_project_root) not in sys.path:
 
 from cipherlab.cipher.spec import CipherSpec
 from cipherlab.cipher.builder import build_cipher
+from cipherlab.cipher.exporter import export_cipher_module
 from AlgorithmsBlock import (
     get_template,
     list_algorithms,
     build_cipher as ab_build_cipher,
     ComponentRegistry,
 )
+
+
+def _load_exported_module(spec: CipherSpec):
+    code = export_cipher_module(spec)
+    compiled = compile(code, f"<exported:{spec.name}>", "exec")
+    module_name = f"_cipherlab_export_test_{spec.name.lower()}"
+    module = types.ModuleType(module_name)
+    sys.modules[module_name] = module
+    try:
+        exec(compiled, module.__dict__)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
+    return module, module_name
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +104,17 @@ def test_arx_roundtrip():
     ct = cipher.encrypt_block(pt, key)
     rt = cipher.decrypt_block(ct, key)
     assert rt == pt
+
+
+@pytest.mark.parametrize("algo_name", ["AES", "TEA", "SPECK"])
+def test_exported_cipher_module_compiles_and_self_tests(algo_name):
+    """Standalone exports should be valid Python and pass their own roundtrip check."""
+    spec = get_template(algo_name, seed=1337)
+    module, module_name = _load_exported_module(spec)
+    try:
+        module.self_test()
+    finally:
+        sys.modules.pop(module_name, None)
 
 
 # ---------------------------------------------------------------------------

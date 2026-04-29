@@ -20,12 +20,13 @@ If you fine-tune a model, the dataset should match how you *use* the model.
 - Unverifiable security guarantees
 - “Novel” components without invertibility checks
 
-## Data format (Vertex supervised tuning)
-Use JSONL records with:
-- `systemInstruction`
-- `contents` messages with roles `user` and `model`
+## Data format (`messages` JSONL)
+Use one JSON object per line with a `messages` array:
+- `{"role": "system", "content": "..."}`
+- `{"role": "user", "content": "..."}`
+- `{"role": "assistant", "content": "..."}`
 
-See Google docs for the canonical JSONL structure.
+This matches the current dataset files under `data/sft/`.
 
 ## Scaling up
 To grow beyond synthetic examples:

@@ -7,7 +7,7 @@ A PhD-quality system should allow others to reproduce results.
 - Generated code (`cipher.py`)
 - Test battery outputs (`report.json`)
 - Random seed
-- Model + version (Gemini model ID)
+- Model label + version used for the run record (for example `DeepSeek-R1-Distill-Qwen-14B` or `DeepSeek-Coder-V2-Lite-Instruct`)
 - Retrieval configuration (top_k, weights, embedding model name)
 - KB snapshot metadata (which KB files were indexed)
 

@@ -215,6 +215,9 @@ def mutate_component(
     provider = OpenAIProvider(
         api_key=settings.openai_api_key,
         openrouter_api_key=settings.openrouter_api_key,
+        local_code_base_url=settings.local_code_base_url if settings.local_llm_enabled else None,
+        local_api_key=settings.local_llm_api_key,
+        local_timeout_seconds=settings.local_llm_timeout_seconds,
     )
 
     req = request.target_requirement
@@ -226,28 +229,21 @@ def mutate_component(
 
     reasoning_trace = None
 
-    if provider.openrouter_client and settings.openrouter_api_key:
-        model_used = settings.openrouter_model_reasoning
-        result = provider.generate_text_chat(
-            model=model_used,
-            system=system,
-            user=user,
-            temperature=0.2,
-            max_tokens=8192,
-            use_openrouter=True,
-        )
-        code = result.text
+    result, model_used = provider.generate_text_with_fallback(
+        openrouter_model=settings.openrouter_model_reasoning if settings.openrouter_api_key else None,
+        fallback_model=settings.openai_model_code,
+        local_model=settings.local_code_model if settings.local_llm_enabled else None,
+        local_role="code",
+        system=system,
+        user=user,
+        primary_temperature=0.2,
+        primary_max_tokens=8192,
+        fallback_temperature=0.2,
+        fallback_max_output_tokens=4096,
+    )
+    code = result.text
+    if model_used == settings.openrouter_model_reasoning:
         code, reasoning_trace = _extract_thinking(code)
-    else:
-        model_used = settings.openai_model_code
-        result = provider.generate_text(
-            model=model_used,
-            system=system,
-            user=user,
-            temperature=0.2,
-            max_output_tokens=4096,
-        )
-        code = result.text
 
     code = _strip_markdown_fences(code)
 
@@ -299,6 +295,9 @@ def mutate_with_retry(
         provider = OpenAIProvider(
             api_key=settings.openai_api_key,
             openrouter_api_key=settings.openrouter_api_key,
+            local_code_base_url=settings.local_code_base_url if settings.local_llm_enabled else None,
+            local_api_key=settings.local_llm_api_key,
+            local_timeout_seconds=settings.local_llm_timeout_seconds,
         )
 
         req = request.target_requirement
@@ -310,21 +309,21 @@ def mutate_with_retry(
 
         reasoning_trace = None
 
-        if provider.openrouter_client and settings.openrouter_api_key:
-            model_used = settings.openrouter_model_reasoning
-            result = provider.generate_text_chat(
-                model=model_used, system=system, user=user,
-                temperature=0.2, max_tokens=8192, use_openrouter=True,
-            )
-            code = result.text
+        result, model_used = provider.generate_text_with_fallback(
+            openrouter_model=settings.openrouter_model_reasoning if settings.openrouter_api_key else None,
+            fallback_model=settings.openai_model_code,
+            local_model=settings.local_code_model if settings.local_llm_enabled else None,
+            local_role="code",
+            system=system,
+            user=user,
+            primary_temperature=0.2,
+            primary_max_tokens=8192,
+            fallback_temperature=0.2,
+            fallback_max_output_tokens=4096,
+        )
+        code = result.text
+        if model_used == settings.openrouter_model_reasoning:
             code, reasoning_trace = _extract_thinking(code)
-        else:
-            model_used = settings.openai_model_code
-            result = provider.generate_text(
-                model=model_used, system=system, user=user,
-                temperature=0.2, max_output_tokens=4096,
-            )
-            code = result.text
 
         code = _strip_markdown_fences(code)
 

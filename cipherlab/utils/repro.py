@@ -29,6 +29,8 @@ class RunPaths:
     metrics_json: Path
     rag_context_json: Path
     llm_transcript_json: Path
+    iteration_history_json: Path
+    tables_dir: Path
 
 
 def make_run_dir(runs_root: str | Path, run_name: str) -> RunPaths:
@@ -44,6 +46,8 @@ def make_run_dir(runs_root: str | Path, run_name: str) -> RunPaths:
         metrics_json=run_dir / "metrics.json",
         rag_context_json=run_dir / "rag_context.json",
         llm_transcript_json=run_dir / "llm_transcript.json",
+        iteration_history_json=run_dir / "iteration_history.json",
+        tables_dir=run_dir / "tables",
     )
 
 

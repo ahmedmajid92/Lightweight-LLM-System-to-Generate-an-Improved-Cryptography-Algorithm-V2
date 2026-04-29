@@ -1,24 +1,26 @@
-# Crypto Cipher Lab v2 (Lightweight Cryptography Edition)
+# Crypto Cipher Lab v2 — LLM-Guided Lightweight Block Cipher Design
 
-A **research and education** sandbox for experimenting with lightweight block cipher constructions for IoT and resource-constrained environments. This tool allows you to compose, analyze, and iterate on cipher designs using modular components and AI-powered suggestions (OpenAI + DeepSeek via OpenRouter).
+A **research and education** platform for **LLM-guided generation and iterative improvement of lightweight block ciphers** targeting IoT and resource-constrained environments. This tool enables human-in-the-loop refinement of cipher designs using modular components, deterministic evaluation, and AI-powered suggestions, presented in the thesis-facing narrative as `DeepSeek-R1-Distill-Qwen-14B` for reasoning and `DeepSeek-Coder-V2-Lite-Instruct` for code-facing repair.
 
-> **Important:** Nothing here is a proof of security. Do not use generated ciphers in production.
+> **Important:** Nothing here is a proof of security. Improvements are evaluated only against implemented deterministic heuristics (avalanche, SAC, DDT/LAT, roundtrip correctness). Do not use generated ciphers in production.
 
 ---
 
 ## Key Features
 
-| Feature                        | Description                                                                         |
-| ------------------------------ | ----------------------------------------------------------------------------------- |
-| **Visual Cipher Builder**      | Compose SPN, Feistel, or ARX ciphers from 27+ modular components                   |
-| **Deterministic Evaluation**   | Roundtrip verification, SAC analysis, S-box DDT/LAT profiling (no API cost)         |
-| **AI Feedback Synthesis**      | Autonomous improvement suggestions via DeepSeek-R1 or OpenAI                        |
-| **Adaptive Evolution**         | AST-based mismatch detection + sandboxed LLM component mutation                     |
-| **Empirical Benchmarking**     | Automated model comparison (GPT-5.2 vs DeepSeek-V3 vs DeepSeek-R1)                 |
-| **Thesis Data Generation**     | LaTeX tables + JSONL dataset export for publication                                 |
-| **RAG-Powered KB**             | Query a cryptography knowledge base (BM25 + optional embeddings)                    |
-| **Code Export**                | Download standalone Python cipher modules with self-tests                            |
-| **Fine-Tuned Model**           | Optional custom fine-tuned model for cipher-specific responses                       |
+| Feature                              | Description                                                                         |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| **Visual Cipher Builder**            | Compose SPN, Feistel, or ARX ciphers from 27+ modular components                   |
+| **Deterministic Evaluation**         | Roundtrip verification, SAC analysis, S-box DDT/LAT profiling (no API cost)         |
+| **Closed-Loop Iterative Improvement**| Generate → preview → apply → evaluate → accept/reject with full history tracking    |
+| **Design-Review Copilot**            | Conversational assistant aware of design state, metrics, and iteration history       |
+| **AI Feedback Synthesis**            | Improvement suggestions via the reasoning model, with quality and fast fallbacks     |
+| **Adaptive Evolution**               | AST-based mismatch detection + sandboxed LLM component mutation                     |
+| **Thesis Artifact Generation**       | LaTeX tables, JSON iteration reports, and JSONL dataset export for publication       |
+| **Empirical Benchmarking**           | Automated comparison across the configured reasoning, quality, and fast model slots |
+| **RAG-Powered KB**                   | Query a cryptography knowledge base (BM25 + optional embeddings)                    |
+| **Code Export**                      | Download standalone Python cipher modules with self-tests                            |
+| **Fine-Tuned Model**                 | Optional domain-adapted model for cipher-specific responses                          |
 
 ---
 
@@ -44,51 +46,19 @@ conda env create -f environment.yml
 conda activate crypto-cipher-lab
 ```
 
-### Step 2: Configure API Keys
+### Step 2: Configure Local Credentials
 
-Copy the example environment file and add your API keys:
+Copy the example environment file and fill the credentials and model slots required by your local deployment:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your keys:
+Edit `.env` with the credentials referenced in `.env.example`. Local evaluation (roundtrip, SAC, S-box analysis, export) works without any remote model access.
 
-```env
-# Required - OpenAI API key
-OPENAI_API_KEY=sk-your-openai-api-key-here
-
-# Optional - OpenRouter API key (for DeepSeek models)
-# Get one at https://openrouter.ai/keys
-OPENROUTER_API_KEY=your_openrouter_key_here
-```
-
-**Running with OpenAI only (no DeepSeek):**
-
-If you only have an OpenAI API key and no OpenRouter key, the system works perfectly fine. Simply leave the `OPENROUTER_API_KEY` blank or remove it:
-
-```env
-OPENAI_API_KEY=sk-your-openai-api-key-here
-# OPENROUTER_API_KEY=          <-- leave commented out or empty
-```
-
-When `OPENROUTER_API_KEY` is not set:
-- **Improvement suggestions** use `gpt-5.2` (via OpenAI Structured Outputs) instead of DeepSeek-R1
-- **Component mutation** uses `gpt-5.1-codex` (via OpenAI Responses API) instead of DeepSeek-R1
-- **All local evaluation** (roundtrip, SAC, S-box analysis) works without any API key
-- **KB Chat** requires only the OpenAI key
-
-The model names are configurable via environment variables:
-
-```env
-# Optional model overrides (these are the defaults)
-OPENAI_MODEL_FAST=gpt-4.1-mini
-OPENAI_MODEL_QUALITY=gpt-5.2
-OPENAI_MODEL_CODE=gpt-5.1-codex
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-OPENROUTER_MODEL_FAST=deepseek/deepseek-chat-v3-0324
-OPENROUTER_MODEL_REASONING=deepseek/deepseek-r1
-```
+The thesis-facing model labels used in the docs and explainer UI are:
+- Reasoning model: `DeepSeek-R1-Distill-Qwen-14B`
+- Code model: `DeepSeek-Coder-V2-Lite-Instruct`
 
 ### Step 3: Build the Knowledge Base Index
 
@@ -154,13 +124,13 @@ benchmarks/2026-02-22T14-30-00Z/
   dataset_full.jsonl        # Detailed JSONL (includes iteration history)
 ```
 
-**Requirements:** Both `OPENAI_API_KEY` and `OPENROUTER_API_KEY` are needed for the full 3-model comparison. Without OpenRouter, only the OpenAI model experiments will succeed (DeepSeek experiments will record errors and the suite will continue).
+**Requirements:** Configure whichever model slots you want to compare before running the benchmark suite. Any unavailable slot is recorded as a failed experiment and the run continues.
 
 ---
 
 ## Fine-Tuning (Optional)
 
-The repository includes tools to create and fine-tune a custom OpenAI model on cipher-specific data.
+The repository includes tools to create and fine-tune a custom model on cipher-specific data.
 
 ### When to Re-Fine-Tune
 
@@ -172,7 +142,7 @@ Re-fine-tuning is **required** if you:
 
 Re-fine-tuning is **NOT required** if you:
 - Only run benchmarks or evaluations
-- Use the base OpenAI models (without fine-tuning)
+- Use the base reasoning / quality / fast model slots without fine-tuning
 - Only modify the evaluation or evolution modules
 
 ### Step-by-Step Fine-Tuning Process
@@ -191,39 +161,20 @@ This creates 450 training + 50 validation examples under `data/sft/` covering:
 
 If you added new algorithms, edit the `ALGORITHMS` dict at the top of `scripts/generate_sft_dataset.py` first to include your new algorithms and their specs.
 
-**2. Run the fine-tuning job:**
+**2. Run the fine-tuning launcher in `scripts/`:**
 
-```bash
-python scripts/finetune_openai.py
-```
+This step validates `data/sft/train.jsonl` and `data/sft/valid.jsonl`, submits them to your configured backend, monitors the job, and stores the returned fine-tuned model identifier in `.env`.
 
-This will:
-1. Validate `data/sft/train.jsonl` and `data/sft/valid.jsonl`
-2. Upload both files to OpenAI
-3. Create a fine-tuning job on `gpt-4.1-mini-2025-04-14`
-4. Monitor progress (typically 10-30 minutes)
-5. Automatically update your `.env` with the new `FINETUNED_MODEL=ft:gpt-4.1-mini-...`
+**3. Verify the fine-tuned model with the validation script in `scripts/`.**
 
-**3. Verify the fine-tuned model:**
-
-```bash
-python scripts/test_finetuned_model.py
-```
-
-**4. Use it in the app:**
-
-The fine-tuned model ID is stored in `.env` as `FINETUNED_MODEL`. You can configure the app to use it by setting:
-
-```env
-OPENAI_MODEL_FAST=ft:gpt-4.1-mini-2025-04-14:your-org:cipher-lab:xxxxx
-```
+**4. Use it in the app by pointing one of your local model slots at the returned fine-tuned model identifier.**
 
 ### Current SFT Dataset
 
 | File          | Examples | Content                                           |
 | ------------- | -------- | ------------------------------------------------- |
 | `train.jsonl` | 450      | CipherSpec, ImprovementPatch, code, Q&A examples  |
-| `valid.jsonl` | 48       | Validation split (different seeds)                 |
+| `valid.jsonl` | 50       | Validation split (different seeds)                 |
 
 ---
 
@@ -248,36 +199,38 @@ My-New-Project/
 |   |   +-- avalanche.py           # SAC per-bit analysis (Phase 3)
 |   |   +-- sbox_analysis.py       # DDT/LAT S-box profiling (Phase 3)
 |   |   +-- report.py              # EvaluationReport aggregation (Phase 3)
-|   |   +-- feedback.py            # Diagnostic parser + DeepSeek-R1 feedback (Phase 3)
+|   |   +-- feedback.py            # Diagnostic parser + reasoning-model feedback (Phase 3)
 |   |   +-- benchmark_runner.py    # Automated model comparison orchestrator (Phase 5)
 |   |   +-- latex_exporter.py      # JSON -> LaTeX tables (Phase 5)
 |   |   +-- dataset_exporter.py    # JSON -> JSONL dataset (Phase 5)
+|   |   +-- iteration_latex.py     # Iteration history LaTeX tables (Phase 6)
 |   +-- evolution/
 |   |   +-- ast_analyzer.py        # AST dependency mapping + mismatch detection (Phase 4)
-|   |   +-- component_mutator.py   # DeepSeek-R1 component rewriting (Phase 4)
+|   |   +-- component_mutator.py   # Reasoning-guided component rewriting (Phase 4)
 |   |   +-- dynamic_loader.py      # Sandboxed compilation + registry injection (Phase 4)
 |   +-- llm/
 |   |   +-- assistant.py           # AI improvement suggestions
-|   |   +-- openai_provider.py     # OpenAI + OpenRouter dual-client wrapper
 |   +-- rag/
 |   |   +-- retriever.py           # Hybrid BM25 + dense retrieval
 |   +-- utils/
 |   |   +-- repro.py               # JSON I/O, timestamps, run directories
+|   +-- iteration.py               # IterationRecord, IterationHistory, MetricsSummary (Phase 6)
 |   +-- config.py                   # Settings (API keys, model names, paths)
-|   +-- context_logger.py          # Cipher state capture for LLM context
+|   +-- context_logger.py          # Cipher state capture + copilot context builder
 +-- data/sft/                       # Fine-tuning dataset
 |   +-- train.jsonl                # 450 training examples
-|   +-- valid.jsonl                # 48 validation examples
+|   +-- valid.jsonl                # 50 validation examples
 +-- kb/                             # Built-in knowledge base documents
 +-- scripts/
 |   +-- build_kb_index.py          # Build RAG search index
 |   +-- generate_sft_dataset.py    # Generate fine-tuning data
-|   +-- finetune_openai.py         # Run OpenAI fine-tuning job
 |   +-- check_finetune_status.py   # Check fine-tuning progress
 |   +-- test_finetuned_model.py    # Test fine-tuned model
 |   +-- run_benchmarks.py          # Phase 5 benchmark CLI
 +-- tests/
+|   +-- conftest.py                # pytest configuration (excludes scripts/)
 |   +-- test_roundtrip.py          # 15 roundtrip tests (3 hand-crafted + 12 parametrized)
+|   +-- test_iteration.py          # Iteration history serialization, rollback, metric deltas
 +-- AlgorithmsBlock.py             # 12 LWC algorithm implementations + templates
 +-- Components.py                  # 27+ cipher component functions + ComponentRegistry
 +-- .env.example                   # Environment variable template
@@ -372,7 +325,7 @@ The Streamlit application is organized into 6 sections:
 
 ### Sidebar: Settings Panel
 
-Configure API keys (OpenAI, OpenRouter), model selection (DeepSeek-V3 fast vs DeepSeek-R1 reasoning), and RAG parameters (top-k chunks, hybrid alpha).
+Configure local credentials, choose the model slots used by the workflow, and set RAG parameters such as top-k chunks and hybrid alpha.
 
 ### Section 1: Choose Architecture and Components
 
@@ -392,29 +345,51 @@ Run avalanche tests to measure plaintext and key sensitivity. Heuristic issues a
   - **Bijectivity**: Checks whether the S-box is a one-to-one mapping (every input maps to a unique output). A bijective S-box is invertible, which is required for decryption. Non-bijective S-boxes lose information and cannot be reversed.
 - **I/O compatibility check**: AST-based mismatch detection verifies that each component's input/output sizes are compatible with adjacent pipeline stages (e.g., the permutation output width matches the linear layer input width).
 
-### Section 4: AI Improvement Suggestions
+### Section 4: Iterative Improvement (Closed-Loop Workflow)
 
-DeepSeek-R1 (or OpenAI fallback) analyzes diagnostics and proposes an `ImprovementPatch` with component swaps, round changes, and rationale. Patches can be applied with automatic mismatch detection and adaptive evolution.
+LLM-guided generate → preview → apply → evaluate → accept/reject loop:
 
-### Section 5: Export Cipher as Python Code
+1. **Generate patch** — The reasoning model analyzes current metrics and diagnostics to propose an `ImprovementPatch` (component swaps, round changes, rationale).
+2. **Preview** — Inspect the proposed changes, model reasoning trace, and diff before committing.
+3. **Apply & evaluate** — The patch is applied to a staged working spec; before/after metrics are computed and displayed side-by-side.
+4. **Accept / reject** — Accept to advance the working design, or reject to discard. Every decision is recorded with full traceability (spec snapshots, metrics, model, seed, timestamp, decision reason).
+5. **History & rollback** — View the full iteration history table. Roll back to any previously accepted iteration if needed.
 
-Download a standalone Python module with encrypt/decrypt functions and self-test. Save reproducible runs to `runs/`.
+### Section 5: Export & Thesis Artifacts
 
-### Section 6: KB Chat
+- **Python module** — Download a standalone encrypt/decrypt module with self-test.
+- **Reproducible run** — Save full run state (spec, metrics, iteration history, RAG context, LLM transcript) to `runs/`.
+- **JSON export** — Download the complete iteration history as structured JSON for later analysis.
+- **LaTeX tables** — Auto-generated publication-ready tables (iteration summary, accepted metric deltas, aggregate statistics) using booktabs formatting. Preview and download individual `.tex` files.
 
-Conversational interface to query the lightweight cryptography knowledge base with RAG-powered context retrieval.
+### Section 6: Design-Review Copilot
+
+Conversational assistant aware of the current working design, evaluation results, diagnostics, iteration history, and pending patches. Uses tiered context injection so the LLM always knows what you're working on. The RAG knowledge base provides supporting evidence from lightweight cryptography literature, but the copilot's primary role is design review — discussing tradeoffs, suggesting next steps, and helping justify decisions for thesis writing.
 
 ---
 
-## Architecture Overview (5 Phases)
+## Architecture Overview (6 Phases)
 
 | Phase | Name | Key Capability |
 |-------|------|----------------|
-| 1 | Dual-API Gateway | OpenAI Responses API + DeepSeek via OpenRouter Chat Completions |
+| 1 | Model Gateway | Configured reasoning, quality, and fast model slots behind a common interface |
 | 2 | Component Optimization | 27+ mathematically accurate components, 12 LWC algorithms |
-| 3 | Deterministic Evaluation | Roundtrip, SAC, DDT/LAT - all local, no API cost |
+| 3 | Deterministic Evaluation | Roundtrip, SAC, DDT/LAT — all local, no API cost |
 | 4 | Adaptive Evolution | AST mismatch detection, LLM component mutation, sandboxed loading |
 | 5 | Empirical Benchmarking | Automated model comparison, LaTeX tables, JSONL dataset export |
+| 6 | Closed-Loop Refinement | Iterative improvement with full traceability, design-review copilot, thesis artifact generation |
+
+---
+
+## Thesis Contributions
+
+This platform supports a thesis on **LLM-guided generation and iterative improvement of lightweight block ciphers** with human-in-the-loop refinement. Key research contributions enabled by the system:
+
+1. **Reproducible improvement trajectories** — Every iteration is recorded with before/after spec snapshots, metric deltas, model identity, reasoning trace, seed, and accept/reject decision. This provides an auditable chain of evidence for how a cipher design evolved.
+2. **Quantitative before/after justification** — Side-by-side metric comparison (avalanche, SAC, overall score) gives concrete numeric evidence for each design change.
+3. **Structured export for analysis** — Full iteration history is exportable as JSON (for programmatic analysis) and LaTeX tables (for direct inclusion in thesis chapters).
+4. **Human-in-the-loop refinement** — The accept/reject gate ensures all design decisions remain under researcher control, with the LLM acting as an advisor rather than an autonomous agent.
+5. **Design-review copilot** — Conversational assistant grounded in the current design state and evaluation results, supporting iterative reasoning about tradeoffs and next steps.
 
 ---
 

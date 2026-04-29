@@ -13,8 +13,8 @@ def score_avalanche(mean: float) -> float:
     return max(0.0, 1.0 - abs(mean - 0.5) / 0.5)
 
 
-def evaluate_and_score(spec: CipherSpec) -> Dict[str, object]:
-    cipher = build_cipher(spec)
+def evaluate_and_score(spec: CipherSpec, registry: Optional[ComponentRegistry] = None) -> Dict[str, object]:
+    cipher = build_cipher(spec, registry)
     metrics = evaluate_cipher(
         cipher,
         block_size_bits=spec.block_size_bits,
@@ -71,7 +71,7 @@ def evaluate_full(
     actual_seed = seed if seed is not None else spec.seed
 
     # 1. Basic avalanche (existing)
-    basic = evaluate_and_score(spec)
+    basic = evaluate_and_score(spec, registry=reg)
 
     # 2. SAC analysis
     cipher = build_cipher(spec, reg)

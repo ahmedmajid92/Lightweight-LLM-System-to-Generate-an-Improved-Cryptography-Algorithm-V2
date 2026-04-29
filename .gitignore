@@ -14,6 +14,15 @@ build/
 # IDE
 .vscode/
 .idea/
+models/
+tools/
+
+# Generated artifacts / data
+kb_index/
+runs/
+data/sft/*.jsonl
+/train.jsonl
+/valid.jsonl
 
 # OS
 .DS_Store

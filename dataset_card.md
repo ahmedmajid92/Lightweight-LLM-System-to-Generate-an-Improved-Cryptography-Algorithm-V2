@@ -1,10 +1,10 @@
-# BlockCipher OpenAI SFT Dataset (v2)
+# BlockCipher SFT Dataset (v2)
 
-This dataset is designed for supervised fine-tuning on OpenAI models that support SFT
-(e.g., gpt-4.1-mini / gpt-4.1-nano).
+This dataset is designed for supervised fine-tuning on chat-style models that support
+JSONL `messages` examples.
 
 It focuses on:
-- Structured knowledge-base style summaries of well-known block ciphers (AES, DES, 3DES, Blowfish, Twofish, Serpent, Camellia, CAST-128, IDEA, SEED, RC5, RC6).
+- Structured knowledge-base style summaries of the 12 lightweight/reference block ciphers used in the project (AES, DES, Blowfish, HIGHT, PRESENT, GIFT, SIMON, SPECK, TEA, XTEA, RC5, LEA).
 - Generating `CipherSpec` JSON compatible with Crypto Cipher Lab v2.
 - Generating `ImprovementPatch` JSON based on local avalanche-style metrics.
 - Writing Python code that uses the lab APIs to export cipher modules and run self-tests.
@@ -14,7 +14,7 @@ Files:
 - valid.jsonl
 
 Format:
-Each line is a JSON object with a `messages` array in the OpenAI supervised fine-tuning format.
+Each line is a JSON object with a `messages` array using `system`, `user`, and `assistant` roles.
 
 Notes:
 - Outputs are written to be cautious and avoid claiming cryptographic security.
